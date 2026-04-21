@@ -7,7 +7,7 @@ import yaml
 from telegram_mcp_server.ids import encode_chat, encode_topic
 
 
-def _make_dialog(peer_id, title, unread_count, message_text, is_forum=False):
+def _make_dialog(peer_id, title, unread_count, message_text, is_forum=False, sender_id=None):
     entity = MagicMock()
     entity.id = peer_id
     entity.title = title
@@ -16,6 +16,16 @@ def _make_dialog(peer_id, title, unread_count, message_text, is_forum=False):
     last_msg = MagicMock()
     last_msg.message = message_text
     last_msg.media = None
+    if sender_id is not None:
+        from_peer = MagicMock()
+        from_peer.user_id = sender_id
+        from_peer.channel_id = None
+        from_peer.chat_id = None
+        last_msg.from_id = from_peer
+        last_msg.peer_id = None
+    else:
+        last_msg.from_id = None
+        last_msg.peer_id = None
 
     dialog = MagicMock()
     dialog.entity = entity
@@ -141,3 +151,52 @@ class TestGetChats:
         assert len(chats) == 1
         assert chats[0]["id"] == encode_topic(500, 1)
         assert chats[0]["name"] == "General"
+
+    async def test_last_sender_name_populated(self):
+        from telegram_mcp_server.tools.chats import get_chats
+
+        dialog = _make_dialog(1, "Chat", unread_count=1, message_text="hello", sender_id=42)
+
+        entity = MagicMock()
+        entity.first_name = "Alice"
+        entity.last_name = None
+        entity.username = "alice"
+        entity.title = None
+
+        client = MagicMock()
+        client.iter_dialogs = MagicMock(return_value=_async_gen([dialog]))
+        client.get_entity = AsyncMock(return_value=entity)
+
+        result = await get_chats(client, unread=True)
+        chats = yaml.safe_load(result)
+        assert "last_sender_name" in chats[0]
+        assert "Alice" in chats[0]["last_sender_name"]
+        assert "@alice" in chats[0]["last_sender_name"]
+
+    async def test_last_sender_name_absent_when_no_sender(self):
+        from telegram_mcp_server.tools.chats import get_chats
+
+        dialog = _make_dialog(1, "Chat", unread_count=1, message_text="hello", sender_id=None)
+
+        client = MagicMock()
+        client.iter_dialogs = MagicMock(return_value=_async_gen([dialog]))
+        client.get_entity = AsyncMock(side_effect=Exception("should not be called"))
+
+        result = await get_chats(client, unread=True)
+        chats = yaml.safe_load(result)
+        assert "last_sender_name" not in chats[0]
+
+    async def test_last_sender_name_absent_when_entity_fetch_fails(self):
+        from telegram_mcp_server.tools.chats import get_chats
+
+        dialog = _make_dialog(1, "Chat", unread_count=1, message_text="hello", sender_id=99)
+
+        client = MagicMock()
+        client.iter_dialogs = MagicMock(return_value=_async_gen([dialog]))
+        client.get_entity = AsyncMock(side_effect=Exception("network error"))
+
+        result = await get_chats(client, unread=True)
+        chats = yaml.safe_load(result)
+        # Entity fetch failed, so last_sender_name should be absent
+        assert "last_sender_name" not in chats[0]
+

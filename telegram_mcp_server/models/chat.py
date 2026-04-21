@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from telegram_mcp_server.ids import encode_chat, encode_topic
@@ -15,14 +15,19 @@ class Chat:
     name: str
     preview: str  # ≤32 characters of the last message
     has_unread: bool
+    last_sender_name: str | None = None
+    # Used for deferred async name resolution in get_chats; not serialised.
+    last_sender_id: int | None = field(default=None, repr=False)
 
     def to_dict(self) -> dict:
-        return {
+        raw = {
             "id": self.id,
             "name": self.name,
             "preview": self.preview,
             "has_unread": self.has_unread,
+            "last_sender_name": self.last_sender_name,
         }
+        return {k: v for k, v in raw.items() if v is not None}
 
     @classmethod
     def from_dialog(cls, dialog: Dialog) -> Chat:
@@ -32,11 +37,13 @@ class Chat:
         name = getattr(entity, "title", None) or _full_name(entity)
         preview = _preview(dialog.message)
         has_unread = dialog.unread_count > 0
+        sender_id = _msg_sender_id(dialog.message)
         return cls(
             id=encode_chat(peer_id),
             name=name,
             preview=preview,
             has_unread=has_unread,
+            last_sender_id=sender_id,
         )
 
     @classmethod
@@ -46,6 +53,7 @@ class Chat:
         topic: ForumTopic,
         last_message_text: str,
         has_unread: bool,
+        last_sender_id: int | None = None,
     ) -> Chat:
         """Build a Chat from a Telethon ForumTopic."""
         return cls(
@@ -53,12 +61,27 @@ class Chat:
             name=topic.title,
             preview=_truncate(last_message_text),
             has_unread=has_unread,
+            last_sender_id=last_sender_id,
         )
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _msg_sender_id(msg: object | None) -> int | None:
+    """Extract the numeric sender ID from a Telethon message object."""
+    if msg is None:
+        return None
+    peer = getattr(msg, "from_id", None) or getattr(msg, "peer_id", None)
+    if peer is None:
+        return None
+    return (
+        getattr(peer, "user_id", None)
+        or getattr(peer, "channel_id", None)
+        or getattr(peer, "chat_id", None)
+    )
 
 
 def _peer_id(entity: object) -> int:

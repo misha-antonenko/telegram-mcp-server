@@ -5,10 +5,30 @@ from __future__ import annotations
 from telethon import TelegramClient
 from telethon.tl.functions.messages import GetForumTopicsRequest
 
-from telegram_mcp_server.models.chat import Chat
+from telegram_mcp_server.models.chat import Chat, _msg_sender_id
+from telegram_mcp_server.tools.messages import _format_sender_name
 from telegram_mcp_server.yaml_utils import to_yaml
 
 PAGE_SIZE = 16
+
+
+async def _populate_last_sender_names(
+    client: TelegramClient, chats: list[Chat]
+) -> None:
+    """Fetch sender entities in batch and set last_sender_name on each chat."""
+    ids = {c.last_sender_id for c in chats if c.last_sender_id is not None}
+    if not ids:
+        return
+    name_map: dict[int, str] = {}
+    for entity_id in ids:
+        try:
+            entity = await client.get_entity(entity_id)
+            name_map[entity_id] = _format_sender_name(entity)
+        except Exception:  # noqa: BLE001
+            pass
+    for chat in chats:
+        if chat.last_sender_id is not None:
+            chat.last_sender_name = name_map.get(chat.last_sender_id)
 
 
 async def get_chats(
@@ -36,6 +56,9 @@ async def get_chats(
                     limit=100,
                 )
             )
+            sender_id_map: dict[int, int | None] = {
+                m.id: _msg_sender_id(m) for m in topics_result.messages
+            }
             msg_map: dict[int, str] = {
                 m.id: (m.message or "") for m in topics_result.messages
             }
@@ -50,6 +73,7 @@ async def get_chats(
                         topic=topic,
                         last_message_text=last_text,
                         has_unread=topic_unread,
+                        last_sender_id=sender_id_map.get(topic.top_message),
                     )
                 )
         else:
@@ -59,4 +83,5 @@ async def get_chats(
             entries.append(Chat.from_dialog(dialog))
 
     page = entries[page_idx * PAGE_SIZE : (page_idx + 1) * PAGE_SIZE]
+    await _populate_last_sender_names(client, page)
     return to_yaml([c.to_dict() for c in page])
