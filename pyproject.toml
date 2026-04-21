@@ -1,0 +1,23 @@
+[project]
+name = "telegram-mcp-server"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "fastmcp>=3.2.4",
+    "pydantic-settings>=2.14.0",
+    "pyyaml>=6.0.3",
+    "telegramify-markdown>=1.1.2",
+    "telethon>=1.43.2",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+    "pytest-asyncio>=1.3.0",
+]
+
+[project.scripts]
+telegram-mcp-server = "main:main"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
