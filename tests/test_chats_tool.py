@@ -61,6 +61,27 @@ class TestGetChats:
         chats2 = yaml.safe_load(result2)
         assert all(not c["has_unread"] for c in chats2)
 
+        client.iter_dialogs = MagicMock(return_value=_async_gen(dialogs))
+        result3 = await get_chats(client, unread=None)
+        chats3 = yaml.safe_load(result3)
+        assert len(chats3) == 2
+
+    async def test_archived_none_does_not_filter(self):
+        from telegram_mcp_server.tools.chats import get_chats
+
+        client = MagicMock()
+        dialogs = [
+            _make_dialog(1, "A", unread_count=1, message_text="x"),
+            _make_dialog(2, "B", unread_count=0, message_text="y"),
+        ]
+        client.iter_dialogs = MagicMock(return_value=_async_gen(dialogs))
+
+        result = await get_chats(client, unread=None, archived=None)
+        chats = yaml.safe_load(result)
+        # archived=None means iter_dialogs called without archived kwarg
+        client.iter_dialogs.assert_called_once_with()
+        assert len(chats) == 2
+
     async def test_pagination(self):
         from telegram_mcp_server.tools.chats import get_chats
 

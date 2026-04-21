@@ -32,16 +32,18 @@ mcp = FastMCP(name="telegram-mcp-server", lifespan=_lifespan)
 @mcp.tool()
 async def get_chats(
     page_idx: int = 0,
-    unread: bool = True,
-    archived: bool = False,
+    unread: bool | None = True,
+    archived: bool | None = False,
 ) -> str:
     """Return a paginated list of Telegram chats as YAML.
 
     Args:
         page_idx: Zero-based page index (16 chats per page).
         unread: When True return only chats with unread messages;
-                when False return only chats with no unread messages.
-        archived: When True return archived chats; when False return non-archived.
+                when False return only chats with no unread messages;
+                when None do not filter by read status.
+        archived: When True return archived chats; when False return non-archived;
+                  when None return both.
     """
     client = await get_client()
     return await _get_chats(client, page_idx=page_idx, unread=unread, archived=archived)

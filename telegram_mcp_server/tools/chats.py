@@ -14,13 +14,14 @@ PAGE_SIZE = 16
 async def get_chats(
     client: TelegramClient,
     page_idx: int = 0,
-    unread: bool = True,
-    archived: bool = False,
+    unread: bool | None = True,
+    archived: bool | None = False,
 ) -> str:
     """Return a YAML-serialised paginated list of chats."""
     entries: list[Chat] = []
 
-    async for dialog in client.iter_dialogs(archived=archived):
+    iter_kwargs = {} if archived is None else {"archived": archived}
+    async for dialog in client.iter_dialogs(**iter_kwargs):
         entity = dialog.entity
         is_forum = getattr(entity, "forum", False)
 
@@ -40,7 +41,7 @@ async def get_chats(
             }
             for topic in topics_result.topics:
                 topic_unread = topic.unread_count > 0
-                if topic_unread != unread:
+                if unread is not None and topic_unread != unread:
                     continue
                 last_text = msg_map.get(topic.top_message, "")
                 entries.append(
@@ -53,7 +54,7 @@ async def get_chats(
                 )
         else:
             has_unread = dialog.unread_count > 0
-            if has_unread != unread:
+            if unread is not None and has_unread != unread:
                 continue
             entries.append(Chat.from_dialog(dialog))
 
