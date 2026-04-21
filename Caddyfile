@@ -1,0 +1,13 @@
+{
+	# Use HTTP-01 challenge only (port 80); TLS-ALPN-01 needs port 443 which may be in use
+	acme_ca https://acme-v02.api.letsencrypt.org/directory
+}
+
+https://{$MCP_DOMAIN}:8443 {
+	tls {
+		issuer acme {
+			disable_tlsalpn_challenge
+		}
+	}
+	reverse_proxy telegram-mcp-server:8000
+}

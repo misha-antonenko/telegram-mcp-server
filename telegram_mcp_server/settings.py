@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     api_hash: str
     session_string: str
     image_cache_dir: Path = Path(".image_cache")
+    mcp_auth_token: str | None = None
+    mcp_host: str = "0.0.0.0"
+    mcp_port: int = 8000
+    mcp_transport: str = "http"
 
 
 _settings: Settings | None = None

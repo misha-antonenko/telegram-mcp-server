@@ -1,0 +1,14 @@
+.venv
+.env
+.git
+.github
+.githooks
+.pytest_cache
+.ruff_cache
+__pycache__
+*.pyc
+*.session
+*.session-journal
+*.session.sql
+*.session.sql-journal
+.image_cache
