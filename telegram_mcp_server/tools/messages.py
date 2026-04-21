@@ -49,24 +49,35 @@ async def _populate_sender_names(
 
 async def get_messages(
     client: TelegramClient,
-    chat_id: str,
+    chat_id: str | None,
     page_idx: int = 0,
+    search_query: str = "",
 ) -> str:
     """Return a YAML-serialised paginated list of messages from *chat_id*.
 
     Pages are ordered newest-first across pages; within each page messages
     are ordered oldest-first (ascending by time).
-    """
-    ref: ChatRef = decode_chat(chat_id)
 
+    When *chat_id* is None and *search_query* is provided, Telegram performs
+    a global search across all chats.
+    """
     kwargs: dict = {}
-    if ref.is_topic:
-        # For forum topics, filter by reply_to_msg_id == topic_id.
-        kwargs["reply_to"] = ref.topic_id
+
+    if chat_id is not None:
+        ref: ChatRef = decode_chat(chat_id)
+        peer_id: int | None = ref.peer_id
+        if ref.is_topic:
+            # For forum topics, filter by reply_to_msg_id == topic_id.
+            kwargs["reply_to"] = ref.topic_id
+    else:
+        peer_id = None
+
+    if search_query:
+        kwargs["search"] = search_query
 
     messages: list[Message] = []
-    async for msg in client.iter_messages(ref.peer_id, **kwargs):
-        messages.append(Message.from_telethon(msg, ref.peer_id))
+    async for msg in client.iter_messages(peer_id, **kwargs):
+        messages.append(Message.from_telethon(msg, peer_id or 0))
 
     page = list(reversed(messages[page_idx * PAGE_SIZE : (page_idx + 1) * PAGE_SIZE]))
     await _populate_sender_names(client, page)

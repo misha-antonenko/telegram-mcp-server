@@ -71,6 +71,27 @@ class TestGetMessages:
         await get_messages(client, chat_id=encode_chat(300))
         client.iter_messages.assert_called_once_with(300)
 
+    async def test_search_query_passed_to_iter_messages(self):
+        from telegram_mcp_server.tools.messages import get_messages
+
+        client = _make_client([])
+        await get_messages(client, chat_id=encode_chat(300), search_query="hello")
+        client.iter_messages.assert_called_once_with(300, search="hello")
+
+    async def test_empty_search_query_not_passed(self):
+        from telegram_mcp_server.tools.messages import get_messages
+
+        client = _make_client([])
+        await get_messages(client, chat_id=encode_chat(300), search_query="")
+        client.iter_messages.assert_called_once_with(300)
+
+    async def test_none_chat_id_passes_none_peer(self):
+        from telegram_mcp_server.tools.messages import get_messages
+
+        client = _make_client([])
+        await get_messages(client, chat_id=None, search_query="global")
+        client.iter_messages.assert_called_once_with(None, search="global")
+
     async def test_page_ascending_order(self):
         from telegram_mcp_server.tools.messages import get_messages
 

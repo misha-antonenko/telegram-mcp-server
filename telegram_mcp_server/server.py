@@ -62,17 +62,22 @@ async def get_message(message_id: str) -> str:
 
 @mcp.tool()
 async def get_messages(
-    chat_id: str,
+    chat_id: str | None = None,
     page_idx: int = 0,
+    search_query: str = "",
 ) -> str:
     """Return a paginated list of messages from a chat as YAML.
 
     Args:
         chat_id: Opaque chat ID obtained from get_chats.
+                 When omitted, Telegram performs a global search (requires search_query).
         page_idx: Zero-based page index (16 messages per page).
+        search_query: Optional search string; filters messages to those containing it.
     """
     client = await get_client()
-    return await _get_messages(client, chat_id=chat_id, page_idx=page_idx)
+    return await _get_messages(
+        client, chat_id=chat_id, page_idx=page_idx, search_query=search_query
+    )
 
 
 @mcp.tool()
