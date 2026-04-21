@@ -1,7 +1,6 @@
 """Tests for the get_image tool."""
 
 import base64
-import tempfile
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 

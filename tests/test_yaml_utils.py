@@ -18,7 +18,7 @@ def test_multiline_string_uses_block_style():
     text = "line one\nline two"
     dumped = to_yaml({"key": text})
     # literal block style: | or |- (no trailing newline)
-    assert ("|\n" in dumped or "|-\n" in dumped)
+    assert "|\n" in dumped or "|-\n" in dumped
     assert _roundtrip({"key": text}) == {"key": text}
 
 

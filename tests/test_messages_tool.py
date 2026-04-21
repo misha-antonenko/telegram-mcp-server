@@ -119,7 +119,6 @@ class TestGetMessages:
         assert "forwarded_from_id" not in row
         assert "reply_to_message_id" not in row
 
-
     async def test_sender_name_no_username(self):
         from telegram_mcp_server.tools.messages import get_messages
         from telethon.tl.types import PeerUser

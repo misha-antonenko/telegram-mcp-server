@@ -3,7 +3,6 @@
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
-import pytest
 
 from telegram_mcp_server.ids import encode_message, encode_message_media
 from telegram_mcp_server.models.message import Message

@@ -28,7 +28,9 @@ def _format_sender_name(entity: object) -> str:
     return name
 
 
-async def _populate_sender_names(client: TelegramClient, messages: list[Message]) -> None:
+async def _populate_sender_names(
+    client: TelegramClient, messages: list[Message]
+) -> None:
     """Fetch sender entities in batch and set sender_name on each message."""
     ids = {m.sender_id for m in messages if m.sender_id is not None}
     if not ids:

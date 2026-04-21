@@ -1,11 +1,10 @@
 """Tests for the get_chats tool."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
-import pytest
 import yaml
 
-from telegram_mcp_server.ids import decode_chat, encode_chat, encode_topic
+from telegram_mcp_server.ids import encode_chat, encode_topic
 
 
 def _make_dialog(peer_id, title, unread_count, message_text, is_forum=False):
@@ -67,7 +66,10 @@ class TestGetChats:
 
         client = MagicMock()
         # 20 unread dialogs
-        dialogs = [_make_dialog(i, f"Chat{i}", unread_count=1, message_text="x") for i in range(20)]
+        dialogs = [
+            _make_dialog(i, f"Chat{i}", unread_count=1, message_text="x")
+            for i in range(20)
+        ]
         client.iter_dialogs = MagicMock(return_value=_async_gen(dialogs))
         result = await get_chats(client, page_idx=0)
         assert len(yaml.safe_load(result)) == 16
@@ -80,7 +82,9 @@ class TestGetChats:
         from telegram_mcp_server.tools.chats import get_chats
 
         client = MagicMock()
-        forum_dialog = _make_dialog(500, "Forum", unread_count=0, message_text="", is_forum=True)
+        forum_dialog = _make_dialog(
+            500, "Forum", unread_count=0, message_text="", is_forum=True
+        )
 
         topic1 = MagicMock()
         topic1.id = 1

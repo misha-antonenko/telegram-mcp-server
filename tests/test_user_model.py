@@ -6,7 +6,14 @@ from telegram_mcp_server.ids import encode_user_photo
 from telegram_mcp_server.models.user import User
 
 
-def _make_full(user_id=1, first="Alice", last="Smith", username="alice", about="Bio text", has_photo=True):
+def _make_full(
+    user_id=1,
+    first="Alice",
+    last="Smith",
+    username="alice",
+    about="Bio text",
+    has_photo=True,
+):
     user = MagicMock()
     user.id = user_id
     user.first_name = first
@@ -25,7 +32,9 @@ def _make_full(user_id=1, first="Alice", last="Smith", username="alice", about="
 
 class TestUserFromFull:
     def test_basic_fields(self):
-        full = _make_full(user_id=5, first="Alice", last="Smith", username="alice", about="Hello")
+        full = _make_full(
+            user_id=5, first="Alice", last="Smith", username="alice", about="Hello"
+        )
         user = User.from_full(full)
         assert user.id == 5
         assert user.name == "Alice Smith"

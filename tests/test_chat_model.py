@@ -25,7 +25,9 @@ def _make_dialog(peer_id=1, title="Chat", unread_count=0, message_text=""):
 
 class TestChatFromDialog:
     def test_basic_fields(self):
-        dialog = _make_dialog(peer_id=42, title="Test", unread_count=3, message_text="hello")
+        dialog = _make_dialog(
+            peer_id=42, title="Test", unread_count=3, message_text="hello"
+        )
         chat = Chat.from_dialog(dialog)
         assert chat.id == encode_chat(42)
         assert chat.name == "Test"

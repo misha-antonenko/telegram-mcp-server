@@ -2,7 +2,6 @@
 
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
 import yaml
 
 from telegram_mcp_server.ids import encode_user_photo

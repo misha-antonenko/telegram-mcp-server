@@ -6,7 +6,7 @@ import pytest
 from telegramify_markdown.entity import MessageEntity as TmEntity
 from telethon.tl import types as tl
 
-from telegram_mcp_server.ids import encode_chat, encode_message, encode_topic
+from telegram_mcp_server.ids import encode_chat, encode_message
 
 
 class TestToTelethonEntities:
@@ -14,10 +14,18 @@ class TestToTelethonEntities:
 
     def _convert(self, entities):
         from telegram_mcp_server.tools.send import _to_telethon_entities
+
         return _to_telethon_entities(entities)
 
     def _entity(self, **kwargs):
-        defaults = dict(type="bold", offset=0, length=5, url=None, language=None, custom_emoji_id=None)
+        defaults = dict(
+            type="bold",
+            offset=0,
+            length=5,
+            url=None,
+            language=None,
+            custom_emoji_id=None,
+        )
         defaults.update(kwargs)
         return TmEntity(**defaults)
 
@@ -41,13 +49,17 @@ class TestToTelethonEntities:
         assert isinstance(result[0], tl.MessageEntityCode)
 
     def test_pre_with_language(self):
-        result = self._convert([self._entity(type="pre", offset=0, length=9, language="python")])
+        result = self._convert(
+            [self._entity(type="pre", offset=0, length=9, language="python")]
+        )
         assert len(result) == 1
         assert isinstance(result[0], tl.MessageEntityPre)
         assert result[0].language == "python"
 
     def test_pre_without_language_defaults_to_empty_string(self):
-        result = self._convert([self._entity(type="pre", offset=0, length=9, language=None)])
+        result = self._convert(
+            [self._entity(type="pre", offset=0, length=9, language=None)]
+        )
         assert isinstance(result[0], tl.MessageEntityPre)
         assert result[0].language == ""
 
@@ -67,24 +79,40 @@ class TestToTelethonEntities:
         assert isinstance(result[0], tl.MessageEntitySpoiler)
 
     def test_text_link(self):
-        result = self._convert([self._entity(type="text_link", offset=0, length=10, url="https://example.com")])
+        result = self._convert(
+            [
+                self._entity(
+                    type="text_link", offset=0, length=10, url="https://example.com"
+                )
+            ]
+        )
         assert len(result) == 1
         assert isinstance(result[0], tl.MessageEntityTextUrl)
         assert result[0].url == "https://example.com"
 
     def test_text_link_without_url_defaults_to_empty_string(self):
-        result = self._convert([self._entity(type="text_link", offset=0, length=5, url=None)])
+        result = self._convert(
+            [self._entity(type="text_link", offset=0, length=5, url=None)]
+        )
         assert isinstance(result[0], tl.MessageEntityTextUrl)
         assert result[0].url == ""
 
     def test_custom_emoji(self):
-        result = self._convert([self._entity(type="custom_emoji", offset=0, length=2, custom_emoji_id="99887766")])
+        result = self._convert(
+            [
+                self._entity(
+                    type="custom_emoji", offset=0, length=2, custom_emoji_id="99887766"
+                )
+            ]
+        )
         assert len(result) == 1
         assert isinstance(result[0], tl.MessageEntityCustomEmoji)
         assert result[0].document_id == 99887766
 
     def test_unknown_type_is_skipped(self):
-        result = self._convert([self._entity(type="mention"), self._entity(type="bold")])
+        result = self._convert(
+            [self._entity(type="mention"), self._entity(type="bold")]
+        )
         assert len(result) == 1
         assert isinstance(result[0], tl.MessageEntityBold)
 
@@ -109,6 +137,7 @@ class TestParseMarkdown:
 
     def _parse(self, text):
         from telegram_mcp_server.tools.send import _parse_markdown
+
         return _parse_markdown(text)
 
     def test_plain_text_no_entities(self):
@@ -168,8 +197,6 @@ class TestParseMarkdown:
         assert any(isinstance(e, tl.MessageEntityBold) for e in entities)
         assert any(isinstance(e, tl.MessageEntityCode) for e in entities)
 
-
-
     async def test_no_backslash_escaping_in_plain_text(self):
         """Regression: plain text with periods/punctuation must not gain backslash escapes."""
         from telegram_mcp_server.tools.send import send_message
@@ -179,12 +206,16 @@ class TestParseMarkdown:
         client = MagicMock()
         client.send_message = AsyncMock(return_value=sent)
 
-        text = "Why do programmers prefer dark mode? 🌑\n\nBecause light attracts bugs. 🐛"
+        text = (
+            "Why do programmers prefer dark mode? 🌑\n\nBecause light attracts bugs. 🐛"
+        )
         await send_message(client, chat_id=encode_chat(1), text=text)
 
         call_kwargs = client.send_message.call_args
         sent_message = call_kwargs.kwargs.get("message") or call_kwargs.args[1]
-        assert "\\" not in sent_message, f"Unexpected backslash escapes in: {sent_message!r}"
+        assert "\\" not in sent_message, (
+            f"Unexpected backslash escapes in: {sent_message!r}"
+        )
         assert "bugs. 🐛" in sent_message
 
     async def test_plain_message(self):
@@ -226,7 +257,9 @@ class TestParseMarkdown:
         client = MagicMock()
         client.send_file = AsyncMock(return_value=sent)
 
-        await send_message(client, chat_id=encode_chat(1), text="pic", attachments=["/tmp/photo.jpg"])
+        await send_message(
+            client, chat_id=encode_chat(1), text="pic", attachments=["/tmp/photo.jpg"]
+        )
         client.send_file.assert_called_once()
 
 
