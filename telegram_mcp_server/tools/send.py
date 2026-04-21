@@ -3,11 +3,55 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import List
 
 import telegramify_markdown
+from telegramify_markdown.entity import MessageEntity as TmEntity
 from telethon import TelegramClient
+from telethon.tl import types as tl
 
 from telegram_mcp_server.ids import decode_chat, decode_message
+
+_ENTITY_TYPE_MAP = {
+    "bold": tl.MessageEntityBold,
+    "italic": tl.MessageEntityItalic,
+    "code": tl.MessageEntityCode,
+    "pre": tl.MessageEntityPre,
+    "strikethrough": tl.MessageEntityStrike,
+    "underline": tl.MessageEntityUnderline,
+    "spoiler": tl.MessageEntitySpoiler,
+    "text_link": tl.MessageEntityTextUrl,
+    "custom_emoji": tl.MessageEntityCustomEmoji,
+}
+
+
+def _to_telethon_entities(entities: list[TmEntity]) -> list:
+    """Convert telegramify_markdown entities to Telethon TL entity objects."""
+    result = []
+    for e in entities:
+        cls = _ENTITY_TYPE_MAP.get(e.type)
+        if cls is None:
+            continue
+        kwargs: dict = {"offset": e.offset, "length": e.length}
+        if e.type == "pre":
+            kwargs["language"] = e.language or ""
+        elif e.type == "text_link":
+            kwargs["url"] = e.url or ""
+        elif e.type == "custom_emoji":
+            kwargs["document_id"] = int(e.custom_emoji_id or 0)
+        result.append(cls(**kwargs))
+    return result
+
+
+def _parse_markdown(text: str) -> tuple[str, list]:
+    """Parse Markdown text into (plain_text, telethon_entities).
+
+    Uses telegramify_markdown.convert() so that the plain text is sent
+    verbatim with formatting applied via entity objects, avoiding any
+    MarkdownV2 escape sequences leaking into the message body.
+    """
+    plain, tm_entities = telegramify_markdown.convert(text)
+    return plain, _to_telethon_entities(tm_entities)
 
 
 async def send_message(
@@ -31,8 +75,7 @@ async def send_message(
     if reply_to_message_id:
         reply_to = decode_message(reply_to_message_id).msg_id
 
-    # Convert Markdown → Telegram HTML / MarkdownV2 via telegramify_markdown
-    formatted = telegramify_markdown.markdownify(text)
+    plain, formatting_entities = _parse_markdown(text)
 
     if attachments:
         files = [Path(p) for p in attachments]
@@ -40,8 +83,8 @@ async def send_message(
             msg = await client.send_file(
                 peer,
                 file=files[0],
-                caption=formatted,
-                parse_mode="md",
+                caption=plain,
+                formatting_entities=formatting_entities,
                 reply_to=reply_to,
             )
         else:
@@ -49,15 +92,15 @@ async def send_message(
             msg = await client.send_file(
                 peer,
                 file=files,
-                caption=formatted,
-                parse_mode="md",
+                caption=plain,
+                formatting_entities=formatting_entities,
                 reply_to=reply_to,
             )
     else:
         msg = await client.send_message(
             peer,
-            message=formatted,
-            parse_mode="md",
+            message=plain,
+            formatting_entities=formatting_entities,
             reply_to=reply_to,
         )
 
