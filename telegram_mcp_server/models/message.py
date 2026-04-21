@@ -16,18 +16,21 @@ class Message:
     timestamp: str  # ISO-8601
     text: str  # may contain <sticker .../> markers or media ID strings
     sender_id: int | None
+    sender_name: str | None  # "Full Name (@username)" or "Full Name"; None if unknown
     forwarded_from_id: int | None  # user/channel ID if forwarded
     reply_to_message_id: str | None  # opaque MessageRef of parent, if reply
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        raw = {
             "id": self.id,
             "timestamp": self.timestamp,
             "text": self.text,
             "sender_id": self.sender_id,
+            "sender_name": self.sender_name,
             "forwarded_from_id": self.forwarded_from_id,
             "reply_to_message_id": self.reply_to_message_id,
         }
+        return {k: v for k, v in raw.items() if v is not None}
 
     @classmethod
     def from_telethon(cls, msg: TLMessage, peer_id: int) -> Message:
@@ -52,6 +55,7 @@ class Message:
             timestamp=timestamp,
             text=text,
             sender_id=sender_id,
+            sender_name=None,
             forwarded_from_id=fwd_id,
             reply_to_message_id=reply_to_id,
         )

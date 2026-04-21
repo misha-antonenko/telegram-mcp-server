@@ -10,6 +10,7 @@ from mcp.types import ImageContent
 from telegram_mcp_server.client import disconnect, get_client
 from telegram_mcp_server.tools.chats import get_chats as _get_chats
 from telegram_mcp_server.tools.media import get_image as _get_image
+from telegram_mcp_server.tools.messages import get_message as _get_message
 from telegram_mcp_server.tools.messages import get_messages as _get_messages
 from telegram_mcp_server.tools.send import forward_message as _forward_message
 from telegram_mcp_server.tools.send import send_message as _send_message
@@ -44,6 +45,17 @@ async def get_chats(
     """
     client = await get_client()
     return await _get_chats(client, page_idx=page_idx, unread=unread, archived=archived)
+
+
+@mcp.tool()
+async def get_message(message_id: str) -> str:
+    """Return a single message as YAML by its opaque message ID.
+
+    Args:
+        message_id: Opaque message ID obtained from get_messages (reply_to_message_id or id).
+    """
+    client = await get_client()
+    return await _get_message(client, message_id=message_id)
 
 
 @mcp.tool()
