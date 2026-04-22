@@ -39,7 +39,13 @@ Copy `.env.example` to `.env` and fill in your credentials:
 API_ID=12345678
 API_HASH=your_api_hash_here
 SESSION_STRING=your_session_string_here
-IMAGE_CACHE_DIR=.image_cache   # optional, default shown
+IMAGE_CACHE_DIR=.image_cache        # optional, default shown
+
+# HTTP transport auth — set one of the two:
+DESCOPE_PROJECT_ID=P3...            # preferred: Descope OAuth via RemoteAuthProvider
+MCP_AUTH_TOKEN=your_static_token   # fallback: static bearer token
+MCP_DOMAIN=your-domain.example     # required with DESCOPE_PROJECT_ID
+MCP_EXTERNAL_PORT=8443             # set if the public HTTPS port differs from 443
 ```
 
 ### 3. Install dependencies

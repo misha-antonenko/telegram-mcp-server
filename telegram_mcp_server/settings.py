@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     mcp_host: str = "0.0.0.0"
     mcp_port: int = 8000
     mcp_transport: str = "http"
+    mcp_domain: str | None = None
+    mcp_external_port: int | None = None
+    descope_project_id: str | None = None
+    descope_server_id: str | None = None
 
 
 _settings: Settings | None = None

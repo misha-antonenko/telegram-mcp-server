@@ -5,9 +5,12 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 
 from fastmcp import FastMCP
+from fastmcp.server.auth.providers.descope import DescopeProvider
+from fastmcp.server.auth.providers.jwt import StaticTokenVerifier
 from mcp.types import ImageContent
 
 from telegram_mcp_server.client import disconnect, get_client
+from telegram_mcp_server.settings import Settings, get_settings
 from telegram_mcp_server.tools.chats import get_chats as _get_chats
 from telegram_mcp_server.tools.media import get_image as _get_image
 from telegram_mcp_server.tools.messages import get_message as _get_message
@@ -26,7 +29,37 @@ async def _lifespan(server: FastMCP):  # noqa: ANN001
         await disconnect()
 
 
-mcp = FastMCP(name="telegram-mcp-server", lifespan=_lifespan)
+def _configure_auth(settings: Settings):
+    if project_id := settings.descope_project_id:
+        assert settings.mcp_domain, "MCP_DOMAIN must be set when using Descope OAuth"
+        assert (server_id := settings.descope_server_id), (
+            "DESCOPE_SERVER_ID must be set when using Descope OAuth"
+        )
+        domain = settings.mcp_domain
+        base_url = (
+            f"https://{domain}:{settings.mcp_external_port}"
+            if settings.mcp_external_port
+            else f"https://{domain}"
+        )
+        return DescopeProvider(
+            config_url=f"https://api.descope.com/v1/apps/agentic/{project_id}/{server_id}/.well-known/openid-configuration",
+            base_url=base_url,
+        )
+    elif auth_token := settings.mcp_auth_token:
+        return StaticTokenVerifier(
+            tokens={auth_token: {"client_id": "mcp-client", "scopes": []}}
+        )
+    else:
+        raise AssertionError(
+            "Either DESCOPE_PROJECT_ID or MCP_AUTH_TOKEN must be set when running in HTTP transport mode"
+        )
+
+
+mcp = FastMCP(
+    name="telegram-mcp-server",
+    lifespan=_lifespan,
+    auth=_configure_auth(get_settings()),
+)
 
 
 @mcp.tool()
