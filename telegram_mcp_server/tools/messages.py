@@ -40,7 +40,7 @@ async def _populate_sender_names(
         try:
             entity = await client.get_entity(entity_id)
             name_map[entity_id] = _format_sender_name(entity)
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass
     for msg in messages:
         if msg.sender_id is not None:
@@ -75,9 +75,10 @@ async def get_messages(
     if search_query:
         kwargs["search"] = search_query
 
-    messages: list[Message] = []
-    async for msg in client.iter_messages(peer_id, **kwargs):
-        messages.append(Message.from_telethon(msg, peer_id or 0))
+    messages = [
+        Message.from_telethon(msg, peer_id or 0)
+        async for msg in client.iter_messages(peer_id, **kwargs)
+    ]
 
     page = list(reversed(messages[page_idx * PAGE_SIZE : (page_idx + 1) * PAGE_SIZE]))
     await _populate_sender_names(client, page)

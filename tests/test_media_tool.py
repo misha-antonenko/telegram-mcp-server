@@ -22,7 +22,7 @@ class TestGetImage:
         client = MagicMock()
         client.get_messages = AsyncMock(return_value=mock_msg)
 
-        async def fake_download(msg, file=None):
+        async def fake_download(_msg, file=None):
             Path(file).write_bytes(fake_bytes)
 
         client.download_media = fake_download
@@ -80,7 +80,7 @@ class TestGetImage:
         media_id = encode_user_photo(99)
         fake_bytes = b"RIFF" + b"\x00" * 4 + b"WEBP"
 
-        async def fake_download_profile(entity, file=None):
+        async def fake_download_profile(_entity, file=None):
             Path(file).write_bytes(fake_bytes)
 
         client = MagicMock()

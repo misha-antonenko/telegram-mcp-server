@@ -9,11 +9,9 @@ Rules:
 import functools
 import io
 from collections.abc import Callable
-from typing import Any, TypeVar
+from typing import Any
 
 import yaml
-
-F = TypeVar("F", bound=Callable[..., Any])
 
 
 # ---------------------------------------------------------------------------
@@ -61,7 +59,7 @@ def to_yaml(value: Any) -> str:
 # ---------------------------------------------------------------------------
 
 
-def returns_yaml(fn: F) -> F:
+def returns_yaml[F: Callable[..., Any]](fn: F) -> F:
     """Decorator: serialize the return value of *fn* to YAML.
 
     The wrapped function must return a dict or list that is JSON-serializable.

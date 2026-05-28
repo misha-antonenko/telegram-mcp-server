@@ -14,7 +14,6 @@ Requirements:
     - python-dotenv
 """
 
-import asyncio
 import getpass
 import io
 import os
@@ -50,7 +49,7 @@ def _qr_login(client: TelegramClient) -> None:
 
     try:
         client.loop.run_until_complete(qr.wait(timeout=120))
-    except asyncio.TimeoutError:
+    except TimeoutError:
         print("\nQR code expired. Please try again.")
         client.disconnect()
         sys.exit(1)
@@ -88,10 +87,10 @@ def _phone_login(client: TelegramClient) -> None:
 
 
 def main() -> None:
-    API_ID = os.getenv("TELEGRAM_API_ID")
-    API_HASH = os.getenv("TELEGRAM_API_HASH")
+    api_id_str = os.getenv("TELEGRAM_API_ID")
+    api_hash = os.getenv("TELEGRAM_API_HASH")
 
-    if not API_ID or not API_HASH:
+    if not api_id_str or not api_hash:
         print("Error: TELEGRAM_API_ID and TELEGRAM_API_HASH must be set in .env file")
         print(
             "Create an .env file with your credentials from https://my.telegram.org/apps"
@@ -99,7 +98,7 @@ def main() -> None:
         sys.exit(1)
 
     try:
-        API_ID = int(API_ID)
+        api_id = int(api_id_str)
     except ValueError:
         print("Error: TELEGRAM_API_ID must be an integer")
         sys.exit(1)
@@ -117,7 +116,7 @@ def main() -> None:
     method = input("\nEnter 1 or 2 [default: 1]: ").strip() or "1"
 
     try:
-        client = TelegramClient(StringSession(), API_ID, API_HASH)
+        client = TelegramClient(StringSession(), api_id, api_hash)
         client.connect()
 
         if not client.is_user_authorized():
@@ -140,7 +139,7 @@ def main() -> None:
         )
         if choice.lower() == "y":
             try:
-                with open(".env", "r") as file:
+                with open(".env") as file:
                     env_contents = file.readlines()
 
                 session_string_line_found = False

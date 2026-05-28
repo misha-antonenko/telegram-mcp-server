@@ -1,6 +1,6 @@
 """Tests for the get_messages and get_message tools."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -9,11 +9,11 @@ import yaml
 from telegram_mcp_server.ids import encode_chat, encode_message, encode_topic
 
 
-def _make_tl_msg(msg_id, text="hi", peer_id=1):
+def _make_tl_msg(msg_id, text="hi"):
     msg = MagicMock()
     msg.id = msg_id
     msg.message = text
-    msg.date = datetime(2024, 1, msg_id if msg_id <= 28 else 1, tzinfo=timezone.utc)
+    msg.date = datetime(2024, 1, msg_id if msg_id <= 28 else 1, tzinfo=UTC)
     msg.media = None
     msg.from_id = None
     msg.peer_id = None
@@ -105,8 +105,9 @@ class TestGetMessages:
         assert ids == [encode_message(1, i) for i in [1, 2, 3, 4, 5]]
 
     async def test_sender_name_populated(self):
-        from telegram_mcp_server.tools.messages import get_messages
         from telethon.tl.types import PeerUser
+
+        from telegram_mcp_server.tools.messages import get_messages
 
         peer = MagicMock(spec=PeerUser)
         peer.user_id = 42
@@ -141,8 +142,9 @@ class TestGetMessages:
         assert "reply_to_message_id" not in row
 
     async def test_sender_name_no_username(self):
-        from telegram_mcp_server.tools.messages import get_messages
         from telethon.tl.types import PeerUser
+
+        from telegram_mcp_server.tools.messages import get_messages
 
         peer = MagicMock(spec=PeerUser)
         peer.user_id = 55
@@ -216,8 +218,9 @@ class TestGetMessage:
         client.get_messages.assert_called_once_with(1234, ids=42)
 
     async def test_sender_name_populated(self):
-        from telegram_mcp_server.tools.messages import get_message
         from telethon.tl.types import PeerUser
+
+        from telegram_mcp_server.tools.messages import get_message
 
         peer = MagicMock(spec=PeerUser)
         peer.user_id = 7
