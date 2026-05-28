@@ -5,7 +5,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 
 from fastmcp import FastMCP
-from fastmcp.server.auth.providers.descope import DescopeProvider
+from fastmcp.server.auth.providers.github import GitHubProvider
 from fastmcp.server.auth.providers.jwt import StaticTokenVerifier
 from mcp.types import ImageContent
 
@@ -21,7 +21,7 @@ from telegram_mcp_server.tools.users import get_user as _get_user
 
 
 @asynccontextmanager
-async def _lifespan(server: FastMCP):  # noqa: ANN001
+async def _lifespan(_server: FastMCP):
     await get_client()
     try:
         yield
@@ -30,19 +30,17 @@ async def _lifespan(server: FastMCP):  # noqa: ANN001
 
 
 def _configure_auth(settings: Settings):
-    if project_id := settings.descope_project_id:
-        assert settings.mcp_domain, "MCP_DOMAIN must be set when using Descope OAuth"
-        assert (server_id := settings.descope_server_id), (
-            "DESCOPE_SERVER_ID must be set when using Descope OAuth"
-        )
+    if settings.github_client_id and settings.github_client_secret:
+        assert settings.mcp_domain, "MCP_DOMAIN must be set when using GitHub OAuth"
         domain = settings.mcp_domain
         base_url = (
             f"https://{domain}:{settings.mcp_external_port}"
             if settings.mcp_external_port
             else f"https://{domain}"
         )
-        return DescopeProvider(
-            config_url=f"https://api.descope.com/v1/apps/agentic/{project_id}/{server_id}/.well-known/openid-configuration",
+        return GitHubProvider(
+            client_id=settings.github_client_id,
+            client_secret=settings.github_client_secret,
             base_url=base_url,
         )
     elif auth_token := settings.mcp_auth_token:
@@ -51,7 +49,7 @@ def _configure_auth(settings: Settings):
         )
     else:
         raise AssertionError(
-            "Either DESCOPE_PROJECT_ID or MCP_AUTH_TOKEN must be set when running in HTTP transport mode"
+            "Either GITHUB_CLIENT_ID/GITHUB_CLIENT_SECRET or MCP_AUTH_TOKEN must be set when running in HTTP transport mode"
         )
 
 

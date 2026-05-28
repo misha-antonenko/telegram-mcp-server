@@ -3,7 +3,7 @@
 	acme_ca https://acme-v02.api.letsencrypt.org/directory
 }
 
-https://{$MCP_DOMAIN}:8443 {
+https://{$MCP_DOMAIN} {
 	tls {
 		issuer acme {
 			disable_tlsalpn_challenge

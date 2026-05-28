@@ -2,7 +2,6 @@
 
 import logging
 
-
 from telegram_mcp_server.server import mcp
 from telegram_mcp_server.settings import get_settings
 
