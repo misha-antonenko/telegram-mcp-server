@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+# MCP image content type (base64 encoded)
+import base64
 import hashlib
 from pathlib import Path
 
@@ -9,9 +11,6 @@ from telethon import TelegramClient
 
 from telegram_mcp_server.ids import MediaRef, decode_media
 from telegram_mcp_server.settings import get_settings
-
-# MCP image content type (base64 encoded)
-import base64
 
 
 async def get_image(client: TelegramClient, media_id: str) -> dict:

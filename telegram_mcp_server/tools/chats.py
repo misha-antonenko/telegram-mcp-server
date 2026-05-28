@@ -24,7 +24,7 @@ async def _populate_last_sender_names(
         try:
             entity = await client.get_entity(entity_id)
             name_map[entity_id] = _format_sender_name(entity)
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass
     for chat in chats:
         if chat.last_sender_id is not None:

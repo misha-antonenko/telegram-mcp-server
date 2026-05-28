@@ -1,8 +1,7 @@
 """Tests for the Message model."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import MagicMock
-
 
 from telegram_mcp_server.ids import encode_message, encode_message_media
 from telegram_mcp_server.models.message import Message
@@ -12,7 +11,7 @@ def _make_msg(**kwargs):
     """Build a minimal mock Telethon Message."""
     msg = MagicMock()
     msg.id = kwargs.get("id", 1)
-    msg.date = kwargs.get("date", datetime(2024, 1, 1, tzinfo=timezone.utc))
+    msg.date = kwargs.get("date", datetime(2024, 1, 1, tzinfo=UTC))
     msg.message = kwargs.get("message", "")
     msg.media = kwargs.get("media", None)
     msg.from_id = kwargs.get("from_id", None)
@@ -32,7 +31,7 @@ class TestMessageFromTelethon:
         assert result.forwarded_from_id is None
 
     def test_timestamp_format(self):
-        dt = datetime(2024, 6, 15, 12, 30, 0, tzinfo=timezone.utc)
+        dt = datetime(2024, 6, 15, 12, 30, 0, tzinfo=UTC)
         msg = _make_msg(date=dt)
         result = Message.from_telethon(msg, peer_id=1)
         assert "2024-06-15" in result.timestamp

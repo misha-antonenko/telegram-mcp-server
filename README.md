@@ -2,12 +2,13 @@
 
 An MCP server that lets an LLM use Telegram as a normal human user, built with [FastMCP](https://github.com/jlowin/fastmcp) and [Telethon](https://github.com/LonamiWebs/Telethon).
 
-## Features
+## Tools
 
 | Tool | Description |
 |------|-------------|
 | `get_chats` | Paginated list of chats sorted by recency, with unread/archived filters and forum topic support |
-| `get_messages` | Paginated messages from a chat (media replaced by opaque IDs, stickers as XML markers) |
+| `get_messages` | Paginated messages from a chat (or global search), with optional keyword filter |
+| `get_message` | Fetch a single message by opaque ID |
 | `get_image` | Fetch and cache a photo by its opaque media ID |
 | `get_user` | Name, username, bio, and profile photo ID for a user |
 | `send_message` | Send a Markdown-formatted message with optional attachments and reply-to |
@@ -15,60 +16,86 @@ An MCP server that lets an LLM use Telegram as a normal human user, built with [
 
 All `get_*` tools (except `get_image`) return valid YAML.
 
-## Setup
+## Deployment
+
+The server is deployed with Docker Compose behind [Caddy](https://caddyserver.com/) (automatic HTTPS). Authentication uses GitHub OAuth via FastMCP's built-in `GitHubProvider`.
 
 ### Prerequisites
 
-- Python 3.13+
-- [uv](https://docs.astral.sh/uv/)
-- A Telegram account and API credentials from [my.telegram.org](https://my.telegram.org)
+- A Linux host with a public domain name pointing to it
+- Docker and Docker Compose
+- A Telegram account with API credentials from [my.telegram.org](https://my.telegram.org)
+- A [GitHub OAuth App](https://github.com/settings/developers) with:
+  - Homepage URL: `https://<your-domain>`
+  - Callback URL: `https://<your-domain>/auth/callback`
 
-### 1. Get a session string
+### 1. Get a Telegram session string
+
+The server authenticates with Telegram using a session string (portable, no session file needed).
 
 ```bash
 uv run python session_string_generator.py
 ```
 
-Follow the prompts. The printed `StringSession` value is your `SESSION_STRING`.
+Follow the prompts. Copy the printed session string.
 
 ### 2. Configure environment
 
-Copy `.env.example` to `.env` and fill in your credentials:
-
-```dotenv
-API_ID=12345678
-API_HASH=your_api_hash_here
-SESSION_STRING=your_session_string_here
-IMAGE_CACHE_DIR=.image_cache        # optional, default shown
-
-# HTTP transport auth — set one of the two:
-DESCOPE_PROJECT_ID=P3...            # preferred: Descope OAuth via RemoteAuthProvider
-MCP_AUTH_TOKEN=your_static_token   # fallback: static bearer token
-MCP_DOMAIN=your-domain.example     # required with DESCOPE_PROJECT_ID
-MCP_EXTERNAL_PORT=8443             # set if the public HTTPS port differs from 443
+```bash
+cp .env.example .env
 ```
 
-### 3. Install dependencies
+Fill in `.env`:
+
+```dotenv
+# Telegram API credentials — from https://my.telegram.org/apps
+API_ID=12345678
+API_HASH=0123456789abcdef0123456789abcdef
+SESSION_STRING=<output from session_string_generator.py>
+
+# Public domain name (Caddy uses this for Let's Encrypt)
+MCP_DOMAIN=your-domain.example
+
+# GitHub OAuth App credentials — from https://github.com/settings/developers
+GITHUB_CLIENT_ID=Ov23li...
+GITHUB_CLIENT_SECRET=...
+```
+
+### 3. Deploy
+
+```bash
+docker compose up -d --build
+```
+
+Caddy will obtain a TLS certificate automatically via Let's Encrypt (HTTP-01 challenge on port 80).
+
+### 4. Connect
+
+Add `https://<your-domain>/mcp` as a custom MCP server in your Claude client. The client will redirect you to GitHub to authorize on first use.
+
+## Local development
+
+### Install dependencies
 
 ```bash
 uv sync
 ```
 
-### 4. Run the server
+### Run locally (stdio transport)
 
 ```bash
-uv run python main.py
+MCP_TRANSPORT=stdio uv run telegram-mcp-server
 ```
 
-Or via the installed entry-point:
+### Run tests
 
 ```bash
-uv run telegram-mcp-server
+uv run pytest
 ```
 
 ## ID scheme
 
-All IDs are opaque strings:
+All IDs passed between tools are opaque strings:
 
 | Kind | Format | Example |
 |------|--------|---------|
@@ -78,25 +105,17 @@ All IDs are opaque strings:
 | Message media | `mp:{peer_id}:{msg_id}` | `mp:-1001234567:42` |
 | User photo | `up:{user_id}` | `up:777000` |
 
-## Development
-
-### Run tests
-
-```bash
-uv run pytest
-```
-
-### Project structure
+## Project structure
 
 ```
 telegram_mcp_server/
   settings.py        # pydantic-settings configuration
   ids.py             # opaque ID encoding/decoding
-  yaml_utils.py      # YAML serialization
+  yaml_utils.py      # YAML serialization helpers
   client.py          # Telethon singleton client
-  models/            # Chat, User, Message pydantic-like dataclasses
-  tools/             # one module per tool
-  server.py          # FastMCP wiring
-tests/               # pytest tests (all mocked, no live API calls)
-rfcs/                # design documents
+  models/            # Chat, User, Message dataclasses
+  tools/             # one module per MCP tool
+  server.py          # FastMCP wiring and tool registration
+tests/               # pytest unit tests (all mocked, no live API calls)
+session_string_generator.py  # interactive script to obtain a Telegram session string
 ```
