@@ -14,6 +14,7 @@ def _make_dialog(peer_id=1, title="Chat", unread_count=0, message_text=""):
 
     last_msg = MagicMock()
     last_msg.message = message_text
+    last_msg.text = message_text
     last_msg.media = None
 
     dialog = MagicMock()
@@ -45,9 +46,9 @@ class TestChatFromDialog:
         chat = Chat.from_dialog(dialog)
         assert len(chat.preview) <= 32
 
-    def test_to_dict_keys(self):
+    def test_model_dump_keys(self):
         dialog = _make_dialog()
-        d = Chat.from_dialog(dialog).to_dict()
+        d = Chat.from_dialog(dialog).model_dump()
         assert set(d.keys()) == {"id", "name", "preview", "has_unread"}
 
 

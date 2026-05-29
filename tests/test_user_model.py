@@ -61,7 +61,7 @@ class TestUserFromFull:
         user = User.from_full(full)
         assert user.name == "Bob"
 
-    def test_to_dict_keys(self):
+    def test_model_dump_keys(self):
         full = _make_full()
-        d = User.from_full(full).to_dict()
+        d = User.from_full(full).model_dump()
         assert set(d.keys()) == {"id", "name", "nickname", "bio", "profile_image_id"}

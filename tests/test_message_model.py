@@ -97,25 +97,19 @@ class TestMessageFromTelethon:
         # Webpage media should NOT replace text with a media ID
         assert result.text == "Check this link"
 
-    def test_to_dict_keys(self):
+    def test_model_dump_omits_none_fields(self):
         msg = _make_msg(message="hi")
         result = Message.from_telethon(msg, peer_id=1)
-        d = result.to_dict()
-        # sender_id/sender_name/forwarded_from_id/reply_to_message_id are None → omitted
+        d = result.model_dump()
         assert set(d.keys()) == {"id", "timestamp", "text"}
-
-    def test_to_dict_omits_none_fields(self):
-        msg = _make_msg(message="hi")
-        result = Message.from_telethon(msg, peer_id=1)
-        d = result.to_dict()
         assert "sender_id" not in d
         assert "sender_name" not in d
         assert "forwarded_from_id" not in d
         assert "reply_to_message_id" not in d
 
-    def test_to_dict_includes_sender_name_when_set(self):
+    def test_model_dump_includes_sender_name_when_set(self):
         msg = _make_msg(message="hi")
         result = Message.from_telethon(msg, peer_id=1)
         result.sender_name = "Alice (@alice)"
-        d = result.to_dict()
+        d = result.model_dump()
         assert d["sender_name"] == "Alice (@alice)"

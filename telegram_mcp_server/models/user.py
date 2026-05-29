@@ -1,30 +1,20 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from telegram_mcp_server.ids import encode_user_photo
+from telegram_mcp_server.models.base import ToolModel
 
 if TYPE_CHECKING:
     from telethon.tl.types import UserFull
 
 
-@dataclass
-class User:
+class User(ToolModel):
     id: int
     name: str
-    nickname: str | None  # Telegram @username
-    bio: str | None
-    profile_image_id: str | None  # opaque media ID, or None
-
-    def to_dict(self) -> dict:
-        return {
-            "id": self.id,
-            "name": self.name,
-            "nickname": self.nickname,
-            "bio": self.bio,
-            "profile_image_id": self.profile_image_id,
-        }
+    nickname: str | None = None  # Telegram @username
+    bio: str | None = None
+    profile_image_id: str | None = None  # opaque media ID, or None
 
     @classmethod
     def from_full(cls, full: UserFull) -> User:

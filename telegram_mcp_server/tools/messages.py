@@ -82,7 +82,7 @@ async def get_messages(
 
     page = list(reversed(messages[page_idx * PAGE_SIZE : (page_idx + 1) * PAGE_SIZE]))
     await _populate_sender_names(client, page)
-    return to_yaml([m.to_dict() for m in page])
+    return to_yaml([m.model_dump() for m in page])
 
 
 async def get_message(client: TelegramClient, message_id: str) -> str:
@@ -92,4 +92,4 @@ async def get_message(client: TelegramClient, message_id: str) -> str:
     assert tl_msg is not None, f"Message not found: {message_id!r}"
     msg = Message.from_telethon(tl_msg, ref.peer_id)
     await _populate_sender_names(client, [msg])
-    return to_yaml(msg.to_dict())
+    return to_yaml(msg.model_dump())

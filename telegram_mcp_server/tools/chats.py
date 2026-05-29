@@ -84,4 +84,4 @@ async def get_chats(
 
     page = entries[page_idx * PAGE_SIZE : (page_idx + 1) * PAGE_SIZE]
     await _populate_last_sender_names(client, page)
-    return to_yaml([c.to_dict() for c in page])
+    return to_yaml([c.model_dump() for c in page])

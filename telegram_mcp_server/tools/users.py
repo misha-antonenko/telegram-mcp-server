@@ -13,4 +13,4 @@ async def get_user(client: TelegramClient, user_id: int) -> str:
     """Return a YAML-serialised User for the given *user_id*."""
     full = await client(GetFullUserRequest(id=user_id))
     user = User.from_full(full)
-    return to_yaml(user.to_dict())
+    return to_yaml(user.model_dump())

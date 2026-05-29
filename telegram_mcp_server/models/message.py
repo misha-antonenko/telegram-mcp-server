@@ -1,36 +1,25 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from telegram_mcp_server.ids import encode_message, encode_message_media
+from telegram_mcp_server.models.base import ToolModel
 
 if TYPE_CHECKING:
     from telethon.tl.types import Message as TLMessage
 
 
-@dataclass
-class Message:
+class Message(ToolModel):
     id: str  # opaque MessageRef
     timestamp: str  # ISO-8601
     text: str  # may contain <sticker .../> markers or media ID strings
-    sender_id: int | None
-    sender_name: str | None  # "Full Name (@username)" or "Full Name"; None if unknown
-    forwarded_from_id: int | None  # user/channel ID if forwarded
-    reply_to_message_id: str | None  # opaque MessageRef of parent, if reply
-
-    def to_dict(self) -> dict[str, Any]:
-        raw = {
-            "id": self.id,
-            "timestamp": self.timestamp,
-            "text": self.text,
-            "sender_id": self.sender_id,
-            "sender_name": self.sender_name,
-            "forwarded_from_id": self.forwarded_from_id,
-            "reply_to_message_id": self.reply_to_message_id,
-        }
-        return {k: v for k, v in raw.items() if v is not None}
+    sender_id: int | None = None
+    sender_name: str | None = (
+        None  # "Full Name (@username)" or "Full Name"; None if unknown
+    )
+    forwarded_from_id: int | None = None  # user/channel ID if forwarded
+    reply_to_message_id: str | None = None  # opaque MessageRef of parent, if reply
 
     @classmethod
     def from_telethon(cls, msg: TLMessage, peer_id: int) -> Message:

@@ -1,33 +1,24 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from pydantic import Field
+
 from telegram_mcp_server.ids import encode_chat, encode_topic
+from telegram_mcp_server.models.base import ToolModel
 
 if TYPE_CHECKING:
     from telethon.tl.types import Dialog, ForumTopic
 
 
-@dataclass
-class Chat:
+class Chat(ToolModel):
     id: str  # opaque ChatRef encoded string
     name: str
     preview: str  # ≤32 characters of the last message
     has_unread: bool
     last_sender_name: str | None = None
     # Used for deferred async name resolution in get_chats; not serialised.
-    last_sender_id: int | None = field(default=None, repr=False)
-
-    def to_dict(self) -> dict:
-        raw = {
-            "id": self.id,
-            "name": self.name,
-            "preview": self.preview,
-            "has_unread": self.has_unread,
-            "last_sender_name": self.last_sender_name,
-        }
-        return {k: v for k, v in raw.items() if v is not None}
+    last_sender_id: int | None = Field(default=None, exclude=True)
 
     @classmethod
     def from_dialog(cls, dialog: Dialog) -> Chat:

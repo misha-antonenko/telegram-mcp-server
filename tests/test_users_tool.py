@@ -58,5 +58,5 @@ class TestGetUser:
 
         result = await get_user(client, user_id=1)
         parsed = yaml.safe_load(result)
-        assert parsed["profile_image_id"] is None
-        assert parsed["bio"] is None
+        assert "profile_image_id" not in parsed
+        assert "bio" not in parsed
