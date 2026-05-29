@@ -85,7 +85,7 @@ Generate one with `openssl rand -base64 32`.
 
 Add `https://<your-domain>/mcp` as a custom MCP server in your Claude client. The client will redirect you to GitHub to authorize on first use.
 
-**Re-authentication after restarts:** FastMCP generates a fresh JWT signing key on each startup, so existing GitHub OAuth tokens are invalidated. If tools stop working after a server restart, disconnect and reconnect (or clear cached tokens) in your Claude client to trigger a new OAuth flow.
+**Token persistence across restarts:** set `GITHUB_JWT_SIGNING_KEY` in `.env` (generate with `openssl rand -base64 32`). Without it, FastMCP generates a fresh signing key on each startup and GitHub OAuth tokens are invalidated, forcing re-authentication in the client.
 
 ## Local development
 

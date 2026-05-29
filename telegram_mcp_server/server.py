@@ -46,6 +46,7 @@ def _configure_auth(settings: Settings):
             client_id=settings.github_client_id,
             client_secret=settings.github_client_secret,
             base_url=base_url,
+            jwt_signing_key=settings.github_jwt_signing_key,
         )
 
     token_verifier = None
@@ -62,7 +63,9 @@ def _configure_auth(settings: Settings):
     if github_provider and token_verifier:
         # Override required_scopes=[] to prevent GitHubProvider's default ['user']
         # scope from being enforced against static tokens.
-        return MultiAuth(server=github_provider, verifiers=[token_verifier], required_scopes=[])
+        return MultiAuth(
+            server=github_provider, verifiers=[token_verifier], required_scopes=[]
+        )
     return github_provider or token_verifier
 
 

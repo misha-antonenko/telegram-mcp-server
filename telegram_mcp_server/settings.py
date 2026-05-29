@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     mcp_external_port: int | None = None
     github_client_id: str | None = None
     github_client_secret: str | None = None
+    github_jwt_signing_key: str | None = None
 
 
 _settings: Settings | None = None
