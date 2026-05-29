@@ -60,7 +60,9 @@ def _configure_auth(settings: Settings):
     )
 
     if github_provider and token_verifier:
-        return MultiAuth(server=github_provider, verifiers=[token_verifier])
+        # Override required_scopes=[] to prevent GitHubProvider's default ['user']
+        # scope from being enforced against static tokens.
+        return MultiAuth(server=github_provider, verifiers=[token_verifier], required_scopes=[])
     return github_provider or token_verifier
 
 
