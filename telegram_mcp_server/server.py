@@ -5,6 +5,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 
 from fastmcp import FastMCP
+from fastmcp.server.auth import MultiAuth
 from fastmcp.server.auth.providers.github import GitHubProvider
 from fastmcp.server.auth.providers.jwt import StaticTokenVerifier
 from mcp.types import ImageContent
@@ -32,6 +33,7 @@ async def _lifespan(_server: FastMCP):
 
 
 def _configure_auth(settings: Settings):
+    github_provider = None
     if settings.github_client_id and settings.github_client_secret:
         assert settings.mcp_domain, "MCP_DOMAIN must be set when using GitHub OAuth"
         domain = settings.mcp_domain
@@ -40,19 +42,26 @@ def _configure_auth(settings: Settings):
             if settings.mcp_external_port
             else f"https://{domain}"
         )
-        return GitHubProvider(
+        github_provider = GitHubProvider(
             client_id=settings.github_client_id,
             client_secret=settings.github_client_secret,
             base_url=base_url,
         )
-    elif auth_token := settings.mcp_auth_token:
-        return StaticTokenVerifier(
+
+    token_verifier = None
+    if auth_token := settings.mcp_auth_token:
+        token_verifier = StaticTokenVerifier(
             tokens={auth_token: {"client_id": "mcp-client", "scopes": []}}
         )
-    else:
-        raise AssertionError(
-            "Either GITHUB_CLIENT_ID/GITHUB_CLIENT_SECRET or MCP_AUTH_TOKEN must be set when running in HTTP transport mode"
-        )
+
+    assert github_provider or token_verifier, (
+        "Either GITHUB_CLIENT_ID/GITHUB_CLIENT_SECRET or MCP_AUTH_TOKEN must be set"
+        " when running in HTTP transport mode"
+    )
+
+    if github_provider and token_verifier:
+        return MultiAuth(server=github_provider, verifiers=[token_verifier])
+    return github_provider or token_verifier
 
 
 mcp = FastMCP(
