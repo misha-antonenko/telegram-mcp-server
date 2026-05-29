@@ -85,6 +85,25 @@ async def get_messages(
     return to_yaml([m.model_dump() for m in page])
 
 
+async def search_messages(
+    client: TelegramClient,
+    query: str,
+    chat_id: str | None = None,
+    page_idx: int = 0,
+) -> str:
+    """Return a YAML-serialised paginated list of messages matching *query*.
+
+    Args:
+        query: Non-empty search string.
+        chat_id: Opaque chat ID to restrict the search to; when None, searches globally.
+        page_idx: Zero-based page index (16 messages per page).
+    """
+    assert query, "query must be non-empty"
+    return await get_messages(
+        client, chat_id=chat_id, page_idx=page_idx, search_query=query
+    )
+
+
 async def get_message(client: TelegramClient, message_id: str) -> str:
     """Return a YAML-serialised single message by its opaque message ID."""
     ref = decode_message(message_id)

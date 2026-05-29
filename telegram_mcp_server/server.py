@@ -12,9 +12,11 @@ from mcp.types import ImageContent
 from telegram_mcp_server.client import disconnect, get_client
 from telegram_mcp_server.settings import Settings, get_settings
 from telegram_mcp_server.tools.chats import get_chats as _get_chats
+from telegram_mcp_server.tools.chats import search_chats as _search_chats
 from telegram_mcp_server.tools.media import get_image as _get_image
 from telegram_mcp_server.tools.messages import get_message as _get_message
 from telegram_mcp_server.tools.messages import get_messages as _get_messages
+from telegram_mcp_server.tools.messages import search_messages as _search_messages
 from telegram_mcp_server.tools.send import forward_message as _forward_message
 from telegram_mcp_server.tools.send import send_message as _send_message
 from telegram_mcp_server.tools.users import get_user as _get_user
@@ -78,6 +80,38 @@ async def get_chats(
     """
     client = await get_client()
     return await _get_chats(client, page_idx=page_idx, unread=unread, archived=archived)
+
+
+@mcp.tool()
+async def search_chats(query: str, limit: int = 16) -> str:
+    """Search for chats by name substring (case-insensitive) across all dialogs.
+
+    Args:
+        query: Non-empty substring to match against chat names.
+        limit: Maximum number of results to return (default 16).
+    """
+    client = await get_client()
+    return await _search_chats(client, query=query, limit=limit)
+
+
+@mcp.tool()
+async def search_messages(
+    query: str,
+    chat_id: str | None = None,
+    page_idx: int = 0,
+) -> str:
+    """Search for messages containing a query string, returning results as YAML.
+
+    Args:
+        query: Non-empty search string.
+        chat_id: Opaque chat ID obtained from get_chats or search_chats.
+                 When omitted, Telegram performs a global search across all chats.
+        page_idx: Zero-based page index (16 messages per page).
+    """
+    client = await get_client()
+    return await _search_messages(
+        client, query=query, chat_id=chat_id, page_idx=page_idx
+    )
 
 
 @mcp.tool()

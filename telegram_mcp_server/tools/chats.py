@@ -31,6 +31,35 @@ async def _populate_last_sender_names(
             chat.last_sender_name = name_map.get(chat.last_sender_id)
 
 
+async def search_chats(
+    client: TelegramClient,
+    query: str,
+    limit: int = 16,
+) -> str:
+    """Return a YAML-serialised list of chats whose name contains *query* (case-insensitive).
+
+    Searches all dialogs (archived and non-archived). Returns at most *limit* results.
+    """
+    assert query, "query must be non-empty"
+    needle = query.lower()
+    matches: list[Chat] = []
+    async for dialog in client.iter_dialogs():
+        entity = dialog.entity
+        name = getattr(entity, "title", None) or _full_name_from_entity(entity)
+        if needle in name.lower():
+            matches.append(Chat.from_dialog(dialog))
+            if len(matches) == limit:
+                break
+    await _populate_last_sender_names(client, matches)
+    return to_yaml([c.model_dump() for c in matches])
+
+
+def _full_name_from_entity(entity: object) -> str:
+    first = getattr(entity, "first_name", "") or ""
+    last = getattr(entity, "last_name", "") or ""
+    return (first + " " + last).strip() or str(getattr(entity, "id", ""))
+
+
 async def get_chats(
     client: TelegramClient,
     page_idx: int = 0,
