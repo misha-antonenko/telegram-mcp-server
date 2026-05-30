@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from typing import TYPE_CHECKING
 
 from telegram_mcp_server.ids import encode_message, encode_message_media
@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 class Message(ToolModel):
     id: str  # opaque MessageRef
-    timestamp: str  # ISO-8601
+    timestamp: str  # "YYYY-MM-DD HH:MM" in UTC+4
     text: str  # may contain <sticker .../> markers or media ID strings
     sender_id: int | None = None
     sender_name: str | None = (
@@ -55,10 +55,13 @@ class Message(ToolModel):
 # ---------------------------------------------------------------------------
 
 
+_UTC4 = timezone(timedelta(hours=4))
+
+
 def _format_ts(dt: datetime | None) -> str:
     if dt is None:
         return ""
-    return dt.isoformat()
+    return dt.astimezone(_UTC4).strftime("%Y-%m-%d %H:%M")
 
 
 def _extract_text(msg: TLMessage, peer_id: int) -> str:

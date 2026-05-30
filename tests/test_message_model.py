@@ -34,7 +34,7 @@ class TestMessageFromTelethon:
         dt = datetime(2024, 6, 15, 12, 30, 0, tzinfo=UTC)
         msg = _make_msg(date=dt)
         result = Message.from_telethon(msg, peer_id=1)
-        assert "2024-06-15" in result.timestamp
+        assert result.timestamp == "2024-06-15 16:30"  # UTC+4
 
     def test_media_replaced_by_id(self):
         from telethon.tl.types import MessageMediaPhoto
