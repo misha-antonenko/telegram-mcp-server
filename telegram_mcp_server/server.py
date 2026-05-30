@@ -97,8 +97,9 @@ async def get_chats(
     """Return a paginated list of Telegram chats as YAML.
 
     Args:
-        folder: One of: "all unarchived", "archive", "unread", "personal",
-                "to respond", "groups", "to read", "work", "local", "bots".
+        folder: One of: "all unarchived", "archive", "Interviews", "Bots",
+                "To respond", "To read", "Groups", "Personal", "Work",
+                "Local", "TAMI".
         page_idx: Zero-based page index (16 chats per page).
     """
     client = await get_client()

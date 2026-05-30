@@ -21,6 +21,18 @@ _FOLDER_ID_ALL_UNARCHIVED = 0
 _FOLDER_ID_ARCHIVE = 1
 
 
+def _filter_title(f: object) -> str | None:
+    """Extract a plain-string title from a dialog filter object.
+
+    Telegram returns titles as TextWithEntities; fall back to str() for
+    any type that doesn't have a .text attribute.
+    """
+    raw = getattr(f, "title", None)
+    if raw is None:
+        return None
+    return getattr(raw, "text", None) or str(raw) or None
+
+
 async def _resolve_folder_id(client: TelegramClient, folder: str) -> int:
     """Return the Telethon folder ID for the given folder name.
 
@@ -32,11 +44,11 @@ async def _resolve_folder_id(client: TelegramClient, folder: str) -> int:
         return _FOLDER_ID_ARCHIVE
     filters = await client(GetDialogFiltersRequest())
     for f in filters.filters:
-        title = getattr(f, "title", None)
+        title = _filter_title(f)
         if title and title.lower() == folder.lower():
             return f.id
     known = [_FOLDER_ALL_UNARCHIVED, _FOLDER_ARCHIVE] + [
-        getattr(f, "title", "") for f in filters.filters if hasattr(f, "title")
+        _filter_title(f) for f in filters.filters if _filter_title(f)
     ]
     raise ValueError(f"Unknown folder {folder!r}. Known folders: {known}")
 
@@ -46,7 +58,7 @@ async def get_folders(client: TelegramClient) -> str:
     filters = await client(GetDialogFiltersRequest())
     names: list[str] = [_FOLDER_ALL_UNARCHIVED, _FOLDER_ARCHIVE]
     for f in filters.filters:
-        title = getattr(f, "title", None)
+        title = _filter_title(f)
         if title:
             names.append(title)
     return to_yaml(names)
