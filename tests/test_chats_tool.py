@@ -109,24 +109,40 @@ class TestGetChats:
         dialog = _make_dialog(1, "Chat", unread_count=0, message_text="hi")
         client.iter_dialogs = MagicMock(return_value=_async_gen([dialog]))
 
-        # _resolve_folder_id for "archive" does not call GetDialogFiltersRequest
         await get_chats(client, folder="archive")
         client.iter_dialogs.assert_called_once_with(folder=1)
 
-    async def test_folder_custom(self):
+    async def test_folder_custom_filters_by_include_peers(self):
         from telegram_mcp_server.tools.chats import get_chats
 
+        # Two dialogs; only peer_id=10 is in the filter's include_peers.
+        peer_in = MagicMock()
+        peer_in.user_id = 10
+        peer_in.channel_id = None
+        peer_in.chat_id = None
+
         custom = _make_filter(5, "Work")
+        custom.pinned_peers = []
+        custom.include_peers = [peer_in]
+
         filters_result = MagicMock()
         filters_result.filters = [custom]
 
+        dialog_in = _make_dialog(10, "Included", unread_count=0, message_text="hi")
+        dialog_out = _make_dialog(20, "Excluded", unread_count=0, message_text="bye")
+
         client = AsyncMock()
-        dialog = _make_dialog(1, "Chat", unread_count=0, message_text="hi")
-        client.iter_dialogs = MagicMock(return_value=_async_gen([dialog]))
+        client.iter_dialogs = MagicMock(
+            return_value=_async_gen([dialog_in, dialog_out])
+        )
         client.return_value = filters_result
 
-        await get_chats(client, folder="Work")
-        client.iter_dialogs.assert_called_once_with(folder=5)
+        result = await get_chats(client, folder="Work")
+        chats = yaml.safe_load(result)
+        assert len(chats) == 1
+        from telegram_mcp_server.ids import encode_chat
+
+        assert chats[0]["id"] == encode_chat(10)
 
     async def test_unknown_folder_raises(self):
         import pytest

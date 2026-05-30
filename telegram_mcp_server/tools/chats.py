@@ -7,6 +7,7 @@ from telethon.tl.functions.messages import (
     GetDialogFiltersRequest,
     GetForumTopicsRequest,
 )
+from telethon.tl.types import DialogFilter
 
 from telegram_mcp_server.models.chat import Chat, _msg_sender_id
 from telegram_mcp_server.tools.messages import _format_sender_name
@@ -16,9 +17,6 @@ PAGE_SIZE = 16
 
 _FOLDER_ALL_UNARCHIVED = "all unarchived"
 _FOLDER_ARCHIVE = "archive"
-# Telethon folder IDs for the two implicit folders.
-_FOLDER_ID_ALL_UNARCHIVED = 0
-_FOLDER_ID_ARCHIVE = 1
 
 
 def _filter_title(f: object) -> str | None:
@@ -33,31 +31,34 @@ def _filter_title(f: object) -> str | None:
     return getattr(raw, "text", None) or str(raw) or None
 
 
-async def _resolve_folder_id(client: TelegramClient, folder: str) -> int:
-    """Return the Telethon folder ID for the given folder name.
+def _peer_id(peer: object) -> int | None:
+    """Return the bare entity ID from an InputPeer."""
+    return (
+        getattr(peer, "user_id", None)
+        or getattr(peer, "channel_id", None)
+        or getattr(peer, "chat_id", None)
+    )
 
-    Raises ValueError if the name does not match any known folder.
-    """
-    if folder == _FOLDER_ALL_UNARCHIVED:
-        return _FOLDER_ID_ALL_UNARCHIVED
-    if folder == _FOLDER_ARCHIVE:
-        return _FOLDER_ID_ARCHIVE
-    filters = await client(GetDialogFiltersRequest())
-    for f in filters.filters:
+
+async def _fetch_filters(client: TelegramClient) -> list:
+    result = await client(GetDialogFiltersRequest())
+    return result.filters
+
+
+async def _find_custom_filter(
+    client: TelegramClient, folder: str
+) -> DialogFilter | None:
+    for f in await _fetch_filters(client):
         title = _filter_title(f)
         if title and title.lower() == folder.lower():
-            return f.id
-    known = [_FOLDER_ALL_UNARCHIVED, _FOLDER_ARCHIVE] + [
-        _filter_title(f) for f in filters.filters if _filter_title(f)
-    ]
-    raise ValueError(f"Unknown folder {folder!r}. Known folders: {known}")
+            return f
+    return None
 
 
 async def get_folders(client: TelegramClient) -> str:
     """Return a YAML list of available folder names."""
-    filters = await client(GetDialogFiltersRequest())
     names: list[str] = [_FOLDER_ALL_UNARCHIVED, _FOLDER_ARCHIVE]
-    for f in filters.filters:
+    for f in await _fetch_filters(client):
         title = _filter_title(f)
         if title:
             names.append(title)
@@ -112,17 +113,46 @@ def _full_name_from_entity(entity: object) -> str:
     return (first + " " + last).strip() or str(getattr(entity, "id", ""))
 
 
+async def _iter_folder_dialogs(client: TelegramClient, folder: str):
+    """Yield dialogs belonging to *folder*, handling custom filters client-side."""
+    if folder == _FOLDER_ALL_UNARCHIVED:
+        async for d in client.iter_dialogs(folder=0):
+            yield d
+        return
+    if folder == _FOLDER_ARCHIVE:
+        async for d in client.iter_dialogs(folder=1):
+            yield d
+        return
+
+    # Custom dialog filter: filter dialogs client-side by include_peers.
+    flt = await _find_custom_filter(client, folder)
+    if flt is None:
+        known = [_FOLDER_ALL_UNARCHIVED, _FOLDER_ARCHIVE] + [
+            _filter_title(f) for f in await _fetch_filters(client) if _filter_title(f)
+        ]
+        raise ValueError(f"Unknown folder {folder!r}. Known folders: {known}")
+
+    included_ids: set[int] = {
+        pid
+        for peer in (
+            list(getattr(flt, "pinned_peers", []))
+            + list(getattr(flt, "include_peers", []))
+        )
+        if (pid := _peer_id(peer)) is not None
+    }
+    async for d in client.iter_dialogs():
+        if d.entity.id in included_ids:
+            yield d
+
+
 async def get_chats(
     client: TelegramClient,
     folder: str,
     page_idx: int = 0,
 ) -> str:
     """Return a YAML-serialised paginated list of chats."""
-    folder_id = await _resolve_folder_id(client, folder)
-    iter_kwargs = {"folder": folder_id}
-
     entries: list[Chat] = []
-    async for dialog in client.iter_dialogs(**iter_kwargs):
+    async for dialog in _iter_folder_dialogs(client, folder):
         entity = dialog.entity
         is_forum = getattr(entity, "forum", False)
 
