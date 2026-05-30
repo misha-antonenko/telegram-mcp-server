@@ -87,25 +87,10 @@ class TestGetChats:
         dialog = _make_dialog(1, "Chat", unread_count=1, message_text="hi")
         client.iter_dialogs = MagicMock(return_value=_async_gen([dialog]))
 
-        result = await get_chats(client)
+        result = await get_chats(client, folder="all unarchived")
         parsed = yaml.safe_load(result)
         assert isinstance(parsed, list)
         assert parsed[0]["id"] == encode_chat(1)
-
-    async def test_no_folder_passes_no_kwarg(self):
-        from telegram_mcp_server.tools.chats import get_chats
-
-        client = MagicMock()
-        dialogs = [
-            _make_dialog(1, "A", unread_count=1, message_text="x"),
-            _make_dialog(2, "B", unread_count=0, message_text="y"),
-        ]
-        client.iter_dialogs = MagicMock(return_value=_async_gen(dialogs))
-
-        result = await get_chats(client, folder=None)
-        chats = yaml.safe_load(result)
-        client.iter_dialogs.assert_called_once_with()
-        assert len(chats) == 2
 
     async def test_folder_all_unarchived(self):
         from telegram_mcp_server.tools.chats import get_chats
@@ -166,11 +151,11 @@ class TestGetChats:
             for i in range(20)
         ]
         client.iter_dialogs = MagicMock(return_value=_async_gen(dialogs))
-        result = await get_chats(client, page_idx=0)
+        result = await get_chats(client, folder="all unarchived", page_idx=0)
         assert len(yaml.safe_load(result)) == 16
 
         client.iter_dialogs = MagicMock(return_value=_async_gen(dialogs))
-        result2 = await get_chats(client, page_idx=1)
+        result2 = await get_chats(client, folder="all unarchived", page_idx=1)
         assert len(yaml.safe_load(result2)) == 4
 
     async def test_forum_topics_expanded(self):
@@ -209,7 +194,7 @@ class TestGetChats:
         client.iter_dialogs = MagicMock(return_value=_async_gen([forum_dialog]))
         client.return_value = topics_result
 
-        result = await get_chats(client)
+        result = await get_chats(client, folder="all unarchived")
         chats = yaml.safe_load(result)
         # Both topics returned — no unread filter anymore.
         assert len(chats) == 2
@@ -234,7 +219,7 @@ class TestGetChats:
         client.iter_dialogs = MagicMock(return_value=_async_gen([dialog]))
         client.get_entity = AsyncMock(return_value=entity)
 
-        result = await get_chats(client)
+        result = await get_chats(client, folder="all unarchived")
         chats = yaml.safe_load(result)
         assert "last_sender_name" in chats[0]
         assert "Alice" in chats[0]["last_sender_name"]
@@ -251,7 +236,7 @@ class TestGetChats:
         client.iter_dialogs = MagicMock(return_value=_async_gen([dialog]))
         client.get_entity = AsyncMock(side_effect=Exception("should not be called"))
 
-        result = await get_chats(client)
+        result = await get_chats(client, folder="all unarchived")
         chats = yaml.safe_load(result)
         assert "last_sender_name" not in chats[0]
 
@@ -266,6 +251,6 @@ class TestGetChats:
         client.iter_dialogs = MagicMock(return_value=_async_gen([dialog]))
         client.get_entity = AsyncMock(side_effect=Exception("network error"))
 
-        result = await get_chats(client)
+        result = await get_chats(client, folder="all unarchived")
         chats = yaml.safe_load(result)
         assert "last_sender_name" not in chats[0]

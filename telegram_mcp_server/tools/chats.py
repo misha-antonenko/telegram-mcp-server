@@ -102,15 +102,12 @@ def _full_name_from_entity(entity: object) -> str:
 
 async def get_chats(
     client: TelegramClient,
+    folder: str,
     page_idx: int = 0,
-    folder: str | None = None,
 ) -> str:
     """Return a YAML-serialised paginated list of chats."""
-    if folder is not None:
-        folder_id = await _resolve_folder_id(client, folder)
-        iter_kwargs = {"folder": folder_id}
-    else:
-        iter_kwargs = {}
+    folder_id = await _resolve_folder_id(client, folder)
+    iter_kwargs = {"folder": folder_id}
 
     entries: list[Chat] = []
     async for dialog in client.iter_dialogs(**iter_kwargs):

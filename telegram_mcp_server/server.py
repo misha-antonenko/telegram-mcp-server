@@ -91,15 +91,15 @@ async def get_folders() -> str:
 
 @mcp.tool()
 async def get_chats(
+    folder: str,
     page_idx: int = 0,
-    folder: str | None = None,
 ) -> str:
     """Return a paginated list of Telegram chats as YAML.
 
     Args:
+        folder: One of: "all unarchived", "archive", "unread", "personal",
+                "to respond", "groups", "to read", "work", "local", "bots".
         page_idx: Zero-based page index (16 chats per page).
-        folder: Folder name from get_folders. When None all dialogs are returned
-                with no folder filter.
     """
     client = await get_client()
     return await _get_chats(client, page_idx=page_idx, folder=folder)
