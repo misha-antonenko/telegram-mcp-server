@@ -13,6 +13,7 @@ from mcp.types import ImageContent
 from telegram_mcp_server.client import disconnect, get_client
 from telegram_mcp_server.settings import Settings, get_settings
 from telegram_mcp_server.tools.chats import get_chats as _get_chats
+from telegram_mcp_server.tools.chats import get_folders as _get_folders
 from telegram_mcp_server.tools.chats import search_chats as _search_chats
 from telegram_mcp_server.tools.media import get_image as _get_image
 from telegram_mcp_server.tools.messages import get_message as _get_message
@@ -77,23 +78,31 @@ mcp = FastMCP(
 
 
 @mcp.tool()
+async def get_folders() -> str:
+    """Return a YAML list of available chat folder names.
+
+    The list always includes "all unarchived" and "archive", plus any
+    custom folders the user has created in Telegram.
+    Use these names as the *folder* argument of get_chats.
+    """
+    client = await get_client()
+    return await _get_folders(client)
+
+
+@mcp.tool()
 async def get_chats(
     page_idx: int = 0,
-    unread: bool | None = True,
-    archived: bool | None = False,
+    folder: str | None = None,
 ) -> str:
     """Return a paginated list of Telegram chats as YAML.
 
     Args:
         page_idx: Zero-based page index (16 chats per page).
-        unread: When True return only chats with unread messages;
-                when False return only chats with no unread messages;
-                when None do not filter by read status.
-        archived: When True return archived chats; when False return non-archived;
-                  when None return both.
+        folder: Folder name from get_folders. When None all dialogs are returned
+                with no folder filter.
     """
     client = await get_client()
-    return await _get_chats(client, page_idx=page_idx, unread=unread, archived=archived)
+    return await _get_chats(client, page_idx=page_idx, folder=folder)
 
 
 @mcp.tool()

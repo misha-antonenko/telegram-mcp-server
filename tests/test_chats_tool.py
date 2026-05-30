@@ -1,4 +1,4 @@
-"""Tests for the get_chats tool."""
+"""Tests for the get_chats and get_folders tools."""
 
 from unittest.mock import AsyncMock, MagicMock
 
@@ -41,6 +41,44 @@ async def _async_gen(items):
         yield item
 
 
+def _make_filter(filter_id, title):
+    f = MagicMock()
+    f.id = filter_id
+    f.title = title
+    return f
+
+
+class TestGetFolders:
+    async def test_returns_fixed_plus_custom(self):
+        from telegram_mcp_server.tools.chats import get_folders
+
+        custom = _make_filter(2, "Work")
+        filters_result = MagicMock()
+        filters_result.filters = [custom]
+
+        client = AsyncMock()
+        client.return_value = filters_result
+
+        result = await get_folders(client)
+        names = yaml.safe_load(result)
+        assert "all unarchived" in names
+        assert "archive" in names
+        assert "Work" in names
+
+    async def test_no_custom_folders(self):
+        from telegram_mcp_server.tools.chats import get_folders
+
+        filters_result = MagicMock()
+        filters_result.filters = []
+
+        client = AsyncMock()
+        client.return_value = filters_result
+
+        result = await get_folders(client)
+        names = yaml.safe_load(result)
+        assert names == ["all unarchived", "archive"]
+
+
 class TestGetChats:
     async def test_returns_yaml(self):
         from telegram_mcp_server.tools.chats import get_chats
@@ -49,36 +87,12 @@ class TestGetChats:
         dialog = _make_dialog(1, "Chat", unread_count=1, message_text="hi")
         client.iter_dialogs = MagicMock(return_value=_async_gen([dialog]))
 
-        result = await get_chats(client, unread=True)
+        result = await get_chats(client)
         parsed = yaml.safe_load(result)
         assert isinstance(parsed, list)
         assert parsed[0]["id"] == encode_chat(1)
 
-    async def test_unread_filter(self):
-        from telegram_mcp_server.tools.chats import get_chats
-
-        client = MagicMock()
-        dialogs = [
-            _make_dialog(1, "Unread", unread_count=2, message_text="new"),
-            _make_dialog(2, "Read", unread_count=0, message_text="old"),
-        ]
-        client.iter_dialogs = MagicMock(return_value=_async_gen(dialogs))
-
-        result = await get_chats(client, unread=True)
-        chats = yaml.safe_load(result)
-        assert all(c["has_unread"] for c in chats)
-
-        client.iter_dialogs = MagicMock(return_value=_async_gen(dialogs))
-        result2 = await get_chats(client, unread=False)
-        chats2 = yaml.safe_load(result2)
-        assert all(not c["has_unread"] for c in chats2)
-
-        client.iter_dialogs = MagicMock(return_value=_async_gen(dialogs))
-        result3 = await get_chats(client, unread=None)
-        chats3 = yaml.safe_load(result3)
-        assert len(chats3) == 2
-
-    async def test_archived_none_does_not_filter(self):
+    async def test_no_folder_passes_no_kwarg(self):
         from telegram_mcp_server.tools.chats import get_chats
 
         client = MagicMock()
@@ -88,17 +102,65 @@ class TestGetChats:
         ]
         client.iter_dialogs = MagicMock(return_value=_async_gen(dialogs))
 
-        result = await get_chats(client, unread=None, archived=None)
+        result = await get_chats(client, folder=None)
         chats = yaml.safe_load(result)
-        # archived=None means iter_dialogs called without archived kwarg
         client.iter_dialogs.assert_called_once_with()
         assert len(chats) == 2
+
+    async def test_folder_all_unarchived(self):
+        from telegram_mcp_server.tools.chats import get_chats
+
+        client = MagicMock()
+        dialog = _make_dialog(1, "Chat", unread_count=0, message_text="hi")
+        client.iter_dialogs = MagicMock(return_value=_async_gen([dialog]))
+
+        await get_chats(client, folder="all unarchived")
+        client.iter_dialogs.assert_called_once_with(folder=0)
+
+    async def test_folder_archive(self):
+        from telegram_mcp_server.tools.chats import get_chats
+
+        client = MagicMock()
+        dialog = _make_dialog(1, "Chat", unread_count=0, message_text="hi")
+        client.iter_dialogs = MagicMock(return_value=_async_gen([dialog]))
+
+        # _resolve_folder_id for "archive" does not call GetDialogFiltersRequest
+        await get_chats(client, folder="archive")
+        client.iter_dialogs.assert_called_once_with(folder=1)
+
+    async def test_folder_custom(self):
+        from telegram_mcp_server.tools.chats import get_chats
+
+        custom = _make_filter(5, "Work")
+        filters_result = MagicMock()
+        filters_result.filters = [custom]
+
+        client = AsyncMock()
+        dialog = _make_dialog(1, "Chat", unread_count=0, message_text="hi")
+        client.iter_dialogs = MagicMock(return_value=_async_gen([dialog]))
+        client.return_value = filters_result
+
+        await get_chats(client, folder="Work")
+        client.iter_dialogs.assert_called_once_with(folder=5)
+
+    async def test_unknown_folder_raises(self):
+        import pytest
+
+        from telegram_mcp_server.tools.chats import get_chats
+
+        filters_result = MagicMock()
+        filters_result.filters = []
+
+        client = AsyncMock()
+        client.return_value = filters_result
+
+        with pytest.raises(ValueError, match="Unknown folder"):
+            await get_chats(client, folder="Nonexistent")
 
     async def test_pagination(self):
         from telegram_mcp_server.tools.chats import get_chats
 
         client = MagicMock()
-        # 20 unread dialogs
         dialogs = [
             _make_dialog(i, f"Chat{i}", unread_count=1, message_text="x")
             for i in range(20)
@@ -147,12 +209,13 @@ class TestGetChats:
         client.iter_dialogs = MagicMock(return_value=_async_gen([forum_dialog]))
         client.return_value = topics_result
 
-        result = await get_chats(client, unread=True)
+        result = await get_chats(client)
         chats = yaml.safe_load(result)
-        # Only topic1 has unread
-        assert len(chats) == 1
-        assert chats[0]["id"] == encode_topic(500, 1)
-        assert chats[0]["name"] == "General"
+        # Both topics returned — no unread filter anymore.
+        assert len(chats) == 2
+        ids = {c["id"] for c in chats}
+        assert encode_topic(500, 1) in ids
+        assert encode_topic(500, 2) in ids
 
     async def test_last_sender_name_populated(self):
         from telegram_mcp_server.tools.chats import get_chats
@@ -171,7 +234,7 @@ class TestGetChats:
         client.iter_dialogs = MagicMock(return_value=_async_gen([dialog]))
         client.get_entity = AsyncMock(return_value=entity)
 
-        result = await get_chats(client, unread=True)
+        result = await get_chats(client)
         chats = yaml.safe_load(result)
         assert "last_sender_name" in chats[0]
         assert "Alice" in chats[0]["last_sender_name"]
@@ -188,7 +251,7 @@ class TestGetChats:
         client.iter_dialogs = MagicMock(return_value=_async_gen([dialog]))
         client.get_entity = AsyncMock(side_effect=Exception("should not be called"))
 
-        result = await get_chats(client, unread=True)
+        result = await get_chats(client)
         chats = yaml.safe_load(result)
         assert "last_sender_name" not in chats[0]
 
@@ -203,7 +266,6 @@ class TestGetChats:
         client.iter_dialogs = MagicMock(return_value=_async_gen([dialog]))
         client.get_entity = AsyncMock(side_effect=Exception("network error"))
 
-        result = await get_chats(client, unread=True)
+        result = await get_chats(client)
         chats = yaml.safe_load(result)
-        # Entity fetch failed, so last_sender_name should be absent
         assert "last_sender_name" not in chats[0]
