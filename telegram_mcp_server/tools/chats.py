@@ -7,9 +7,10 @@ from telethon.tl.functions.messages import (
     GetDialogFiltersRequest,
     GetForumTopicsRequest,
 )
-from telethon.tl.types import DialogFilter
+from telethon.tl.types import Channel, Chat, DialogFilter, User
 
-from telegram_mcp_server.models.chat import Chat, _msg_sender_id
+from telegram_mcp_server.models.chat import Chat as ChatModel
+from telegram_mcp_server.models.chat import _msg_sender_id
 from telegram_mcp_server.tools.messages import _format_sender_name
 from telegram_mcp_server.yaml_utils import to_yaml
 
@@ -40,6 +41,60 @@ def _peer_id(peer: object) -> int | None:
     )
 
 
+def _peer_ids(peers: list) -> set[int]:
+    return {pid for p in peers if (pid := _peer_id(p)) is not None}
+
+
+def _dialog_matches_filter(dialog: object, flt: DialogFilter) -> bool:
+    """Return True if *dialog* belongs to *flt* per Telegram's filter semantics.
+
+    Order of precedence (mirrors official client behaviour):
+    1. Explicitly excluded peers → reject.
+    2. Explicitly included peers (pinned + include_peers) → accept.
+    3. Category flags (contacts, non_contacts, groups, broadcasts, bots) → accept
+       if the dialog's entity type matches an enabled flag.
+    4. No match → reject.
+
+    exclude_muted / exclude_read / exclude_archived are intentionally not
+    applied here because we want to show all folder members, not a filtered
+    view (the caller can add those filters later if needed).
+    """
+    entity = dialog.entity
+    eid = entity.id
+
+    exclude_ids = _peer_ids(getattr(flt, "exclude_peers", []))
+    if eid in exclude_ids:
+        return False
+
+    include_ids = _peer_ids(
+        list(getattr(flt, "pinned_peers", [])) + list(getattr(flt, "include_peers", []))
+    )
+    if eid in include_ids:
+        return True
+
+    # Category-flag matching.
+    if isinstance(entity, User):
+        if getattr(entity, "bot", False):
+            return bool(getattr(flt, "bots", False))
+        if getattr(entity, "contact", False):
+            return bool(getattr(flt, "contacts", False))
+        return bool(getattr(flt, "non_contacts", False))
+
+    if isinstance(entity, Chat):
+        # Basic group (not a supergroup/channel).
+        return bool(getattr(flt, "groups", False))
+
+    if isinstance(entity, Channel):
+        is_group = getattr(entity, "megagroup", False) or getattr(
+            entity, "gigagroup", False
+        )
+        if is_group:
+            return bool(getattr(flt, "groups", False))
+        return bool(getattr(flt, "broadcasts", False))
+
+    return False
+
+
 async def _fetch_filters(client: TelegramClient) -> list:
     result = await client(GetDialogFiltersRequest())
     return result.filters
@@ -66,7 +121,7 @@ async def get_folders(client: TelegramClient) -> str:
 
 
 async def _populate_last_sender_names(
-    client: TelegramClient, chats: list[Chat]
+    client: TelegramClient, chats: list[ChatModel]
 ) -> None:
     """Fetch sender entities in batch and set last_sender_name on each chat."""
     ids = {c.last_sender_id for c in chats if c.last_sender_id is not None}
@@ -95,12 +150,12 @@ async def search_chats(
     """
     assert query, "query must be non-empty"
     needle = query.lower()
-    matches: list[Chat] = []
+    matches: list[ChatModel] = []
     async for dialog in client.iter_dialogs():
         entity = dialog.entity
         name = getattr(entity, "title", None) or _full_name_from_entity(entity)
         if needle in name.lower():
-            matches.append(Chat.from_dialog(dialog))
+            matches.append(ChatModel.from_dialog(dialog))
             if len(matches) == limit:
                 break
     await _populate_last_sender_names(client, matches)
@@ -124,7 +179,6 @@ async def _iter_folder_dialogs(client: TelegramClient, folder: str):
             yield d
         return
 
-    # Custom dialog filter: filter dialogs client-side by include_peers.
     flt = await _find_custom_filter(client, folder)
     if flt is None:
         known = [_FOLDER_ALL_UNARCHIVED, _FOLDER_ARCHIVE] + [
@@ -132,16 +186,8 @@ async def _iter_folder_dialogs(client: TelegramClient, folder: str):
         ]
         raise ValueError(f"Unknown folder {folder!r}. Known folders: {known}")
 
-    included_ids: set[int] = {
-        pid
-        for peer in (
-            list(getattr(flt, "pinned_peers", []))
-            + list(getattr(flt, "include_peers", []))
-        )
-        if (pid := _peer_id(peer)) is not None
-    }
     async for d in client.iter_dialogs():
-        if d.entity.id in included_ids:
+        if _dialog_matches_filter(d, flt):
             yield d
 
 
@@ -151,7 +197,7 @@ async def get_chats(
     page_idx: int = 0,
 ) -> str:
     """Return a YAML-serialised paginated list of chats."""
-    entries: list[Chat] = []
+    entries: list[ChatModel] = []
     async for dialog in _iter_folder_dialogs(client, folder):
         entity = dialog.entity
         is_forum = getattr(entity, "forum", False)
@@ -175,7 +221,7 @@ async def get_chats(
             for topic in topics_result.topics:
                 last_text = msg_map.get(topic.top_message, "")
                 entries.append(
-                    Chat.from_topic(
+                    ChatModel.from_topic(
                         supergroup_id=entity.id,
                         topic=topic,
                         last_message_text=last_text,
@@ -184,7 +230,7 @@ async def get_chats(
                     )
                 )
         else:
-            entries.append(Chat.from_dialog(dialog))
+            entries.append(ChatModel.from_dialog(dialog))
 
     page = entries[page_idx * PAGE_SIZE : (page_idx + 1) * PAGE_SIZE]
     await _populate_last_sender_names(client, page)

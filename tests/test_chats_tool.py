@@ -113,9 +113,10 @@ class TestGetChats:
         client.iter_dialogs.assert_called_once_with(folder=1)
 
     async def test_folder_custom_filters_by_include_peers(self):
+        from telethon.tl.types import User
+
         from telegram_mcp_server.tools.chats import get_chats
 
-        # Two dialogs; only peer_id=10 is in the filter's include_peers.
         peer_in = MagicMock()
         peer_in.user_id = 10
         peer_in.channel_id = None
@@ -124,12 +125,31 @@ class TestGetChats:
         custom = _make_filter(5, "Work")
         custom.pinned_peers = []
         custom.include_peers = [peer_in]
+        custom.exclude_peers = []
+        custom.contacts = False
+        custom.non_contacts = False
+        custom.groups = False
+        custom.broadcasts = False
+        custom.bots = False
 
         filters_result = MagicMock()
         filters_result.filters = [custom]
 
+        # dialog_in: entity id=10 matches include_peers.
         dialog_in = _make_dialog(10, "Included", unread_count=0, message_text="hi")
+        dialog_in.entity = MagicMock(spec=User)
+        dialog_in.entity.id = 10
+        dialog_in.entity.bot = False
+        dialog_in.entity.contact = False
+        dialog_in.entity.forum = False
+
+        # dialog_out: not in any explicit or category list.
         dialog_out = _make_dialog(20, "Excluded", unread_count=0, message_text="bye")
+        dialog_out.entity = MagicMock(spec=User)
+        dialog_out.entity.id = 20
+        dialog_out.entity.bot = False
+        dialog_out.entity.contact = False
+        dialog_out.entity.forum = False
 
         client = AsyncMock()
         client.iter_dialogs = MagicMock(
@@ -140,9 +160,91 @@ class TestGetChats:
         result = await get_chats(client, folder="Work")
         chats = yaml.safe_load(result)
         assert len(chats) == 1
-        from telegram_mcp_server.ids import encode_chat
-
         assert chats[0]["id"] == encode_chat(10)
+
+    async def test_folder_custom_filters_by_category_flags(self):
+        from telethon.tl.types import Channel, User
+
+        from telegram_mcp_server.tools.chats import get_chats
+
+        custom = _make_filter(5, "Channels")
+        custom.pinned_peers = []
+        custom.include_peers = []
+        custom.exclude_peers = []
+        custom.contacts = False
+        custom.non_contacts = False
+        custom.groups = False
+        custom.broadcasts = True  # include broadcast channels
+        custom.bots = False
+
+        filters_result = MagicMock()
+        filters_result.filters = [custom]
+
+        # A broadcast channel — should be included.
+        dialog_channel = _make_dialog(1, "Chan", unread_count=0, message_text="x")
+        dialog_channel.entity = MagicMock(spec=Channel)
+        dialog_channel.entity.id = 1
+        dialog_channel.entity.megagroup = False
+        dialog_channel.entity.gigagroup = False
+        dialog_channel.entity.forum = False
+
+        # A plain user — should not be included.
+        dialog_user = _make_dialog(2, "User", unread_count=0, message_text="y")
+        dialog_user.entity = MagicMock(spec=User)
+        dialog_user.entity.id = 2
+        dialog_user.entity.bot = False
+        dialog_user.entity.contact = False
+        dialog_user.entity.forum = False
+
+        client = AsyncMock()
+        client.iter_dialogs = MagicMock(
+            return_value=_async_gen([dialog_channel, dialog_user])
+        )
+        client.return_value = filters_result
+
+        result = await get_chats(client, folder="Channels")
+        chats = yaml.safe_load(result)
+        assert len(chats) == 1
+        assert chats[0]["id"] == encode_chat(1)
+
+    async def test_folder_custom_exclude_peers_override(self):
+        from telethon.tl.types import User
+
+        from telegram_mcp_server.tools.chats import get_chats
+
+        exclude_peer = MagicMock()
+        exclude_peer.user_id = 10
+        exclude_peer.channel_id = None
+        exclude_peer.chat_id = None
+
+        custom = _make_filter(5, "Work")
+        custom.pinned_peers = []
+        custom.include_peers = []
+        custom.exclude_peers = [exclude_peer]
+        custom.contacts = True  # would include all contacts ...
+        custom.non_contacts = False
+        custom.groups = False
+        custom.broadcasts = False
+        custom.bots = False
+
+        filters_result = MagicMock()
+        filters_result.filters = [custom]
+
+        # A contact that is also excluded — exclude wins.
+        dialog = _make_dialog(10, "Bob", unread_count=0, message_text="hi")
+        dialog.entity = MagicMock(spec=User)
+        dialog.entity.id = 10
+        dialog.entity.bot = False
+        dialog.entity.contact = True
+        dialog.entity.forum = False
+
+        client = AsyncMock()
+        client.iter_dialogs = MagicMock(return_value=_async_gen([dialog]))
+        client.return_value = filters_result
+
+        result = await get_chats(client, folder="Work")
+        chats = yaml.safe_load(result)
+        assert len(chats) == 0
 
     async def test_unknown_folder_raises(self):
         import pytest
