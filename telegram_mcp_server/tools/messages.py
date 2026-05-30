@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from telethon import TelegramClient
 from telethon import utils as tl_utils
 
@@ -31,17 +33,20 @@ def _format_sender_name(entity: object) -> str:
 async def _populate_sender_names(
     client: TelegramClient, messages: list[Message]
 ) -> None:
-    """Fetch sender entities in batch and set sender_name on each message."""
+    """Fetch sender entities concurrently and set sender_name on each message."""
     ids = {m.sender_id for m in messages if m.sender_id is not None}
     if not ids:
         return
-    name_map: dict[int, str] = {}
-    for entity_id in ids:
+
+    async def _fetch(entity_id: int) -> tuple[int, str] | None:
         try:
             entity = await client.get_entity(entity_id)
-            name_map[entity_id] = _format_sender_name(entity)
+            return entity_id, _format_sender_name(entity)
         except Exception:
-            pass
+            return None
+
+    results = await asyncio.gather(*(_fetch(eid) for eid in ids))
+    name_map = {eid: name for r in results if r is not None for eid, name in [r]}
     for msg in messages:
         if msg.sender_id is not None:
             msg.sender_name = name_map.get(msg.sender_id)
@@ -75,12 +80,17 @@ async def get_messages(
     if search_query:
         kwargs["search"] = search_query
 
-    messages = [
-        Message.from_telethon(msg, peer_id or 0)
-        async for msg in client.iter_messages(peer_id, **kwargs)
-    ]
-
-    page = list(reversed(messages[page_idx * PAGE_SIZE : (page_idx + 1) * PAGE_SIZE]))
+    # Fetch only the needed page from the server (newest-first, then reverse for display).
+    kwargs["limit"] = PAGE_SIZE
+    kwargs["add_offset"] = page_idx * PAGE_SIZE
+    page = list(
+        reversed(
+            [
+                Message.from_telethon(msg, peer_id or 0)
+                async for msg in client.iter_messages(peer_id, **kwargs)
+            ]
+        )
+    )
     await _populate_sender_names(client, page)
     return to_yaml([m.model_dump() for m in page])
 
