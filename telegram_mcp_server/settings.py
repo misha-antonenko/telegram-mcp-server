@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     github_client_id: str | None = None
     github_client_secret: str | None = None
     github_jwt_signing_key: str | None = None
+    oauth_storage_dir: Path = Path(".oauth_storage")
 
 
 _settings: Settings | None = None

@@ -5,6 +5,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./server.log:/app/server.log
+      - oauth_storage:/app/.oauth_storage
 
   caddy:
     image: caddy:2-alpine
@@ -21,3 +22,4 @@ services:
 
 volumes:
   caddy_data:
+  oauth_storage:
