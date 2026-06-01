@@ -41,6 +41,7 @@ class Chat(ToolModel):
     def from_topic(
         cls,
         supergroup_id: int,
+        forum_name: str,
         topic: ForumTopic,
         last_message_text: str,
         has_unread: bool,
@@ -49,7 +50,7 @@ class Chat(ToolModel):
         """Build a Chat from a Telethon ForumTopic."""
         return cls(
             id=encode_topic(supergroup_id, topic.id),
-            name=topic.title,
+            name=f"{forum_name} / {topic.title}",
             preview=_truncate(last_message_text),
             has_unread=has_unread,
             last_sender_id=last_sender_id,

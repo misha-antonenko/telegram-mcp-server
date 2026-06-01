@@ -319,6 +319,9 @@ class TestGetChats:
         ids = {c["id"] for c in chats}
         assert encode_topic(500, 1) in ids
         assert encode_topic(500, 2) in ids
+        # Topic names must be prefixed with the forum name.
+        names = {c["name"] for c in chats}
+        assert any(n.startswith("Forum / ") for n in names)
 
     async def test_last_sender_name_populated(self):
         from telegram_mcp_server.tools.chats import get_chats

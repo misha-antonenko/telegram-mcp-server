@@ -59,12 +59,13 @@ class TestChatFromTopic:
         topic.title = "My Topic"
         chat = Chat.from_topic(
             supergroup_id=111,
+            forum_name="My Forum",
             topic=topic,
             last_message_text="hi",
             has_unread=True,
         )
         assert chat.id == encode_topic(111, 7)
-        assert chat.name == "My Topic"
+        assert chat.name == "My Forum / My Topic"
         assert chat.has_unread is True
 
     def test_preview_truncated_for_topic(self):
@@ -73,6 +74,7 @@ class TestChatFromTopic:
         topic.title = "T"
         chat = Chat.from_topic(
             supergroup_id=1,
+            forum_name="F",
             topic=topic,
             last_message_text="X" * 100,
             has_unread=False,

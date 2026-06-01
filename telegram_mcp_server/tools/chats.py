@@ -218,11 +218,13 @@ async def get_chats(
             msg_map: dict[int, str] = {
                 m.id: (m.message or "") for m in topics_result.messages
             }
+            forum_name = getattr(entity, "title", "") or ""
             for topic in topics_result.topics:
                 last_text = msg_map.get(topic.top_message, "")
                 entries.append(
                     ChatModel.from_topic(
                         supergroup_id=entity.id,
+                        forum_name=forum_name,
                         topic=topic,
                         last_message_text=last_text,
                         has_unread=topic.unread_count > 0,
