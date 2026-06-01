@@ -11,9 +11,9 @@ from telethon.tl.functions.messages import (
 )
 from telethon.tl.types import Channel, Chat, DialogFilter, User
 
+from telegram_mcp_server.client import get_owner_id
 from telegram_mcp_server.models.chat import Chat as ChatModel
 from telegram_mcp_server.models.chat import _msg_sender_id
-from telegram_mcp_server.settings import get_settings
 from telegram_mcp_server.yaml_utils import to_yaml
 
 PAGE_SIZE = 16
@@ -149,7 +149,7 @@ async def search_chats(
             matches.append(ChatModel.from_dialog(dialog))
             if len(matches) == limit:
                 break
-    _populate_last_senders(get_settings().owner_id, matches)
+    _populate_last_senders(get_owner_id(), matches)
     return to_yaml([c.model_dump() for c in matches])
 
 
@@ -242,5 +242,5 @@ async def get_chats(
 
     entries.sort(key=lambda c: c.last_message_date or _EPOCH, reverse=True)
     page = entries[page_idx * PAGE_SIZE : (page_idx + 1) * PAGE_SIZE]
-    _populate_last_senders(get_settings().owner_id, page)
+    _populate_last_senders(get_owner_id(), page)
     return to_yaml([c.model_dump() for c in page])

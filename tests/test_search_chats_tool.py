@@ -7,13 +7,9 @@ import yaml
 
 from telegram_mcp_server.ids import encode_chat
 
-_MOCK_SETTINGS = MagicMock(owner_id=999)
-
 
 def _patch_settings():
-    return patch(
-        "telegram_mcp_server.tools.chats.get_settings", return_value=_MOCK_SETTINGS
-    )
+    return patch("telegram_mcp_server.tools.chats.get_owner_id", return_value=999)
 
 
 def _make_dialog(peer_id, title, unread_count=0):

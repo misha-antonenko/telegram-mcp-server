@@ -8,6 +8,7 @@ from telethon import TelegramClient
 from telethon.sessions import StringSession
 
 _client: TelegramClient | None = None
+_owner_id: int | None = None
 _lock: asyncio.Lock | None = None
 
 
@@ -20,7 +21,7 @@ def _get_lock() -> asyncio.Lock:
 
 async def get_client() -> TelegramClient:
     """Return the connected singleton TelegramClient, creating it if needed."""
-    global _client
+    global _client, _owner_id
     async with _get_lock():
         if _client is None or not _client.is_connected():
             from telegram_mcp_server.settings import get_settings
@@ -33,7 +34,15 @@ async def get_client() -> TelegramClient:
             )
         if not _client.is_connected():
             await _client.connect()
+            me = await _client.get_me()
+            _owner_id = me.id
     return _client
+
+
+def get_owner_id() -> int:
+    """Return the authenticated user's Telegram ID. Requires get_client() called first."""
+    assert _owner_id is not None, "owner ID not yet fetched — call get_client() first"
+    return _owner_id
 
 
 async def disconnect() -> None:
