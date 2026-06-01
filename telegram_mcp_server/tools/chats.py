@@ -171,14 +171,21 @@ def _full_name_from_entity(entity: object) -> str:
     return (first + " " + last).strip() or str(getattr(entity, "id", ""))
 
 
-async def _iter_folder_dialogs(client: TelegramClient, folder: str):
-    """Yield dialogs belonging to *folder*, handling custom filters client-side."""
+async def _iter_folder_dialogs(
+    client: TelegramClient, folder: str, limit: int | None = None
+):
+    """Yield dialogs belonging to *folder*, handling custom filters client-side.
+
+    *limit* caps how many dialogs are fetched from Telegram for built-in
+    folders; it is ignored for custom folders because those require a full
+    client-side scan to apply filter semantics.
+    """
     if folder == _FOLDER_ALL_UNARCHIVED:
-        async for d in client.iter_dialogs(folder=0):
+        async for d in client.iter_dialogs(folder=0, limit=limit):
             yield d
         return
     if folder == _FOLDER_ARCHIVE:
-        async for d in client.iter_dialogs(folder=1):
+        async for d in client.iter_dialogs(folder=1, limit=limit):
             yield d
         return
 
@@ -200,8 +207,12 @@ async def get_chats(
     page_idx: int = 0,
 ) -> str:
     """Return a YAML-serialised paginated list of chats."""
+    # For built-in folders Telegram returns dialogs in recency order, so
+    # fetching (page_idx+1)*PAGE_SIZE dialogs is sufficient to populate all
+    # pages up to and including page_idx after forum expansion and sorting.
+    dialog_limit = (page_idx + 1) * PAGE_SIZE
     entries: list[ChatModel] = []
-    async for dialog in _iter_folder_dialogs(client, folder):
+    async for dialog in _iter_folder_dialogs(client, folder, limit=dialog_limit):
         entity = dialog.entity
         is_forum = getattr(entity, "forum", False)
 

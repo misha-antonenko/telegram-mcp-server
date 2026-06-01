@@ -93,24 +93,73 @@ class TestGetChats:
         assert parsed[0]["id"] == encode_chat(1)
 
     async def test_folder_all_unarchived(self):
-        from telegram_mcp_server.tools.chats import get_chats
+        from telegram_mcp_server.tools.chats import PAGE_SIZE, get_chats
 
         client = MagicMock()
         dialog = _make_dialog(1, "Chat", unread_count=0, message_text="hi")
         client.iter_dialogs = MagicMock(return_value=_async_gen([dialog]))
 
-        await get_chats(client, folder="all unarchived")
-        client.iter_dialogs.assert_called_once_with(folder=0)
+        await get_chats(client, folder="all unarchived", page_idx=0)
+        client.iter_dialogs.assert_called_once_with(folder=0, limit=PAGE_SIZE)
 
     async def test_folder_archive(self):
-        from telegram_mcp_server.tools.chats import get_chats
+        from telegram_mcp_server.tools.chats import PAGE_SIZE, get_chats
 
         client = MagicMock()
         dialog = _make_dialog(1, "Chat", unread_count=0, message_text="hi")
         client.iter_dialogs = MagicMock(return_value=_async_gen([dialog]))
 
-        await get_chats(client, folder="archive")
-        client.iter_dialogs.assert_called_once_with(folder=1)
+        await get_chats(client, folder="archive", page_idx=0)
+        client.iter_dialogs.assert_called_once_with(folder=1, limit=PAGE_SIZE)
+
+    async def test_builtin_folder_limit_scales_with_page(self):
+        """iter_dialogs limit must grow with the requested page index."""
+        from telegram_mcp_server.tools.chats import PAGE_SIZE, get_chats
+
+        client = MagicMock()
+        client.iter_dialogs = MagicMock(return_value=_async_gen([]))
+
+        await get_chats(client, folder="all unarchived", page_idx=2)
+        client.iter_dialogs.assert_called_once_with(folder=0, limit=3 * PAGE_SIZE)
+
+    async def test_custom_folder_no_limit(self):
+        """Custom folders must scan all dialogs (no limit passed)."""
+        from telethon.tl.types import User
+
+        from telegram_mcp_server.tools.chats import get_chats
+
+        peer_in = MagicMock()
+        peer_in.user_id = 10
+        peer_in.channel_id = None
+        peer_in.chat_id = None
+
+        custom = _make_filter(5, "Work")
+        custom.pinned_peers = []
+        custom.include_peers = [peer_in]
+        custom.exclude_peers = []
+        custom.contacts = False
+        custom.non_contacts = False
+        custom.groups = False
+        custom.broadcasts = False
+        custom.bots = False
+
+        filters_result = MagicMock()
+        filters_result.filters = [custom]
+
+        dialog = _make_dialog(10, "Bob", unread_count=0, message_text="hi")
+        dialog.entity = MagicMock(spec=User)
+        dialog.entity.id = 10
+        dialog.entity.bot = False
+        dialog.entity.contact = False
+        dialog.entity.forum = False
+
+        client = AsyncMock()
+        client.iter_dialogs = MagicMock(return_value=_async_gen([dialog]))
+        client.return_value = filters_result
+
+        await get_chats(client, folder="Work", page_idx=0)
+        # Custom folders call iter_dialogs() with no folder= or limit= keyword.
+        client.iter_dialogs.assert_called_once_with()
 
     async def test_folder_custom_filters_by_include_peers(self):
         from telethon.tl.types import User
