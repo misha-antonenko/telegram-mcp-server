@@ -8,7 +8,6 @@ from fastmcp import FastMCP
 from fastmcp.server.auth import MultiAuth
 from fastmcp.server.auth.providers.github import GitHubProvider
 from fastmcp.server.auth.providers.jwt import StaticTokenVerifier
-from key_value.aio.stores.filetree.store import FileTreeStore
 from mcp.types import ImageContent
 
 from telegram_mcp_server.client import disconnect, get_client
@@ -44,14 +43,11 @@ def _configure_auth(settings: Settings):
             if settings.mcp_external_port
             else f"https://{domain}"
         )
-        storage_dir = settings.oauth_storage_dir
-        storage_dir.mkdir(parents=True, exist_ok=True)
         github_provider = GitHubProvider(
             client_id=settings.github_client_id,
             client_secret=settings.github_client_secret,
             base_url=base_url,
             jwt_signing_key=settings.github_jwt_signing_key,
-            client_storage=FileTreeStore(data_directory=storage_dir),
         )
 
     token_verifier = None
