@@ -13,7 +13,7 @@ from telethon.tl.types import Channel, Chat, DialogFilter, User
 
 from telegram_mcp_server.models.chat import Chat as ChatModel
 from telegram_mcp_server.models.chat import _msg_sender_id
-from telegram_mcp_server.tools.messages import _format_sender_name
+from telegram_mcp_server.settings import get_settings
 from telegram_mcp_server.yaml_utils import to_yaml
 
 PAGE_SIZE = 16
@@ -123,23 +123,11 @@ async def get_folders(client: TelegramClient) -> str:
     return to_yaml(names)
 
 
-async def _populate_last_sender_names(
-    client: TelegramClient, chats: list[ChatModel]
-) -> None:
-    """Fetch sender entities in batch and set last_sender_name on each chat."""
-    ids = {c.last_sender_id for c in chats if c.last_sender_id is not None}
-    if not ids:
-        return
-    name_map: dict[int, str] = {}
-    for entity_id in ids:
-        try:
-            entity = await client.get_entity(entity_id)
-            name_map[entity_id] = _format_sender_name(entity)
-        except Exception:
-            pass
+def _populate_last_senders(my_id: int, chats: list[ChatModel]) -> None:
+    """Set last_sender to 'me' or 'them' on each chat based on sender ID."""
     for chat in chats:
         if chat.last_sender_id is not None:
-            chat.last_sender_name = name_map.get(chat.last_sender_id)
+            chat.last_sender = "me" if chat.last_sender_id == my_id else "them"
 
 
 async def search_chats(
@@ -161,7 +149,7 @@ async def search_chats(
             matches.append(ChatModel.from_dialog(dialog))
             if len(matches) == limit:
                 break
-    await _populate_last_sender_names(client, matches)
+    _populate_last_senders(get_settings().owner_id, matches)
     return to_yaml([c.model_dump() for c in matches])
 
 
@@ -254,5 +242,5 @@ async def get_chats(
 
     entries.sort(key=lambda c: c.last_message_date or _EPOCH, reverse=True)
     page = entries[page_idx * PAGE_SIZE : (page_idx + 1) * PAGE_SIZE]
-    await _populate_last_sender_names(client, page)
+    _populate_last_senders(get_settings().owner_id, page)
     return to_yaml([c.model_dump() for c in page])

@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     api_id: int
     api_hash: str
     session_string: str
+    owner_id: int
     image_cache_dir: Path = Path(".image_cache")
     mcp_auth_token: str | None = None
     mcp_host: str = "0.0.0.0"

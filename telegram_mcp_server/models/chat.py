@@ -17,8 +17,8 @@ class Chat(ToolModel):
     name: str
     preview: str  # ≤32 characters of the last message
     has_unread: bool
-    last_sender_name: str | None = None
-    # Not serialised; used for sorting and entity lookup inside get_chats.
+    last_sender: str | None = None  # "me" or "them"
+    # Not serialised; used for sorting and sender resolution inside get_chats.
     last_sender_id: int | None = Field(default=None, exclude=True)
     last_message_date: datetime | None = Field(default=None, exclude=True)
 
@@ -27,7 +27,7 @@ class Chat(ToolModel):
         """Build a Chat from a regular Telethon Dialog."""
         entity = dialog.entity
         peer_id = _peer_id(entity)
-        name = getattr(entity, "title", None) or _full_name(entity)
+        name = _entity_name(entity)
         preview = _preview(dialog.message)
         has_unread = dialog.unread_count > 0
         sender_id = _msg_sender_id(dialog.message)
@@ -91,6 +91,15 @@ def _full_name(entity: object) -> str:
     first = getattr(entity, "first_name", "") or ""
     last = getattr(entity, "last_name", "") or ""
     return (first + " " + last).strip() or str(_peer_id(entity))
+
+
+def _entity_name(entity: object) -> str:
+    """Return display name for an entity, appending @username when available."""
+    base = getattr(entity, "title", None) or _full_name(entity)
+    username = getattr(entity, "username", None)
+    if username:
+        return f"{base} (@{username})"
+    return base
 
 
 def _truncate(text: str, limit: int = 32) -> str:

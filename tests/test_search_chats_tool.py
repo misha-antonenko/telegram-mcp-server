@@ -1,17 +1,26 @@
 """Tests for the search_chats tool."""
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 import yaml
 
 from telegram_mcp_server.ids import encode_chat
 
+_MOCK_SETTINGS = MagicMock(owner_id=999)
+
+
+def _patch_settings():
+    return patch(
+        "telegram_mcp_server.tools.chats.get_settings", return_value=_MOCK_SETTINGS
+    )
+
 
 def _make_dialog(peer_id, title, unread_count=0):
     entity = MagicMock()
     entity.id = peer_id
     entity.title = title
+    entity.username = None
     entity.forum = False
 
     last_msg = MagicMock()
@@ -34,6 +43,13 @@ async def _async_gen(items):
 
 
 class TestSearchChats:
+    def setup_method(self):
+        self._settings_patch = _patch_settings()
+        self._settings_patch.start()
+
+    def teardown_method(self):
+        self._settings_patch.stop()
+
     async def test_substring_match_case_insensitive(self):
         from telegram_mcp_server.tools.chats import search_chats
 

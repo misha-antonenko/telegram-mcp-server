@@ -10,6 +10,7 @@ def _make_dialog(peer_id=1, title="Chat", unread_count=0, message_text=""):
     entity = MagicMock()
     entity.id = peer_id
     entity.title = title
+    entity.username = None
     entity.forum = False
 
     last_msg = MagicMock()
