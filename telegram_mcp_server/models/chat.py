@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from pydantic import Field
@@ -17,8 +18,9 @@ class Chat(ToolModel):
     preview: str  # ≤32 characters of the last message
     has_unread: bool
     last_sender_name: str | None = None
-    # Used for deferred async name resolution in get_chats; not serialised.
+    # Not serialised; used for sorting and entity lookup inside get_chats.
     last_sender_id: int | None = Field(default=None, exclude=True)
+    last_message_date: datetime | None = Field(default=None, exclude=True)
 
     @classmethod
     def from_dialog(cls, dialog: Dialog) -> Chat:
@@ -29,12 +31,14 @@ class Chat(ToolModel):
         preview = _preview(dialog.message)
         has_unread = dialog.unread_count > 0
         sender_id = _msg_sender_id(dialog.message)
+        date = getattr(dialog.message, "date", None) if dialog.message else None
         return cls(
             id=encode_chat(peer_id),
             name=name,
             preview=preview,
             has_unread=has_unread,
             last_sender_id=sender_id,
+            last_message_date=date,
         )
 
     @classmethod
@@ -46,6 +50,7 @@ class Chat(ToolModel):
         last_message_text: str,
         has_unread: bool,
         last_sender_id: int | None = None,
+        last_message_date: datetime | None = None,
     ) -> Chat:
         """Build a Chat from a Telethon ForumTopic."""
         return cls(
@@ -54,6 +59,7 @@ class Chat(ToolModel):
             preview=_truncate(last_message_text),
             has_unread=has_unread,
             last_sender_id=last_sender_id,
+            last_message_date=last_message_date,
         )
 
 

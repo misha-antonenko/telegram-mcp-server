@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from telethon import TelegramClient
 from telethon.tl.functions.messages import (
     GetDialogFiltersRequest,
@@ -16,6 +18,7 @@ from telegram_mcp_server.yaml_utils import to_yaml
 
 PAGE_SIZE = 16
 
+_EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 _FOLDER_ALL_UNARCHIVED = "all unarchived"
 _FOLDER_ARCHIVE = "archive"
 
@@ -218,6 +221,9 @@ async def get_chats(
             msg_map: dict[int, str] = {
                 m.id: (m.message or "") for m in topics_result.messages
             }
+            date_map: dict[int, object] = {
+                m.id: getattr(m, "date", None) for m in topics_result.messages
+            }
             forum_name = getattr(entity, "title", "") or ""
             for topic in topics_result.topics:
                 last_text = msg_map.get(topic.top_message, "")
@@ -229,11 +235,13 @@ async def get_chats(
                         last_message_text=last_text,
                         has_unread=topic.unread_count > 0,
                         last_sender_id=sender_id_map.get(topic.top_message),
+                        last_message_date=date_map.get(topic.top_message),
                     )
                 )
         else:
             entries.append(ChatModel.from_dialog(dialog))
 
+    entries.sort(key=lambda c: c.last_message_date or _EPOCH, reverse=True)
     page = entries[page_idx * PAGE_SIZE : (page_idx + 1) * PAGE_SIZE]
     await _populate_last_sender_names(client, page)
     return to_yaml([c.model_dump() for c in page])

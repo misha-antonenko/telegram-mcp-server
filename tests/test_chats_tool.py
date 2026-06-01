@@ -276,6 +276,70 @@ class TestGetChats:
         result2 = await get_chats(client, folder="all unarchived", page_idx=1)
         assert len(yaml.safe_load(result2)) == 4
 
+    async def test_entries_sorted_by_last_message_date(self):
+        """Forum topics must be interleaved with regular chats by recency."""
+        from datetime import datetime, timezone
+
+        from telegram_mcp_server.tools.chats import get_chats
+        from telegram_mcp_server.ids import encode_chat, encode_topic
+
+        def _dt(ts: int) -> datetime:
+            return datetime.fromtimestamp(ts, tz=timezone.utc)
+
+        # Regular chat with date=5.
+        chat_dialog = _make_dialog(1, "Chat", unread_count=0, message_text="hi")
+        chat_dialog.entity.forum = False
+        chat_dialog.message.date = _dt(5)
+
+        # Forum dialog; topic1 date=8 (newer than chat), topic2 date=3 (older).
+        forum_dialog = _make_dialog(
+            500, "Forum", unread_count=0, message_text="", is_forum=True
+        )
+
+        topic1 = MagicMock()
+        topic1.id = 1
+        topic1.title = "Recent"
+        topic1.unread_count = 0
+        topic1.top_message = 10
+
+        topic2 = MagicMock()
+        topic2.id = 2
+        topic2.title = "Old"
+        topic2.unread_count = 0
+        topic2.top_message = 20
+
+        msg10 = MagicMock()
+        msg10.id = 10
+        msg10.message = "recent"
+        msg10.date = _dt(8)
+        msg10.from_id = None
+        msg10.peer_id = None
+
+        msg20 = MagicMock()
+        msg20.id = 20
+        msg20.message = "old"
+        msg20.date = _dt(3)
+        msg20.from_id = None
+        msg20.peer_id = None
+
+        topics_result = MagicMock()
+        topics_result.topics = [topic1, topic2]
+        topics_result.messages = [msg10, msg20]
+
+        client = AsyncMock()
+        client.iter_dialogs = MagicMock(
+            return_value=_async_gen([forum_dialog, chat_dialog])
+        )
+        client.return_value = topics_result
+
+        result = await get_chats(client, folder="all unarchived")
+        chats = yaml.safe_load(result)
+        assert len(chats) == 3
+        # Expected order: topic1(8) > chat(5) > topic2(3)
+        assert chats[0]["id"] == encode_topic(500, 1)
+        assert chats[1]["id"] == encode_chat(1)
+        assert chats[2]["id"] == encode_topic(500, 2)
+
     async def test_forum_topics_expanded(self):
         from telegram_mcp_server.tools.chats import get_chats
 
