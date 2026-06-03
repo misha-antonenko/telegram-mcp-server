@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     api_hash: str
     session_string: str
     image_cache_dir: Path = Path(".image_cache")
+    attachments_dir: Path = Path(".attachments")
     mcp_auth_token: str | None = None
     mcp_host: str = "0.0.0.0"
     mcp_port: int = 8000

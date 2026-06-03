@@ -13,6 +13,7 @@ An MCP server that lets an LLM use Telegram as a normal human user, built with [
 | `get_message` | Fetch a single message by opaque ID |
 | `get_image` | Fetch and cache a photo by its opaque media ID |
 | `get_user` | Name, username, bio, and profile photo ID for a user |
+| `upload_attachment` | Upload a base64-encoded file to the server's attachments directory |
 | `send_message` | Send a Markdown-formatted message with optional attachments and reply-to |
 | `forward_message` | Forward a message to another chat |
 

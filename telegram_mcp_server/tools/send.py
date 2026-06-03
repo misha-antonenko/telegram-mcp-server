@@ -1,7 +1,8 @@
-"""send_message and forward_message tool implementations."""
+"""send_message, forward_message, and upload_attachment tool implementations."""
 
 from __future__ import annotations
 
+import base64
 from pathlib import Path
 
 import telegramify_markdown
@@ -53,12 +54,43 @@ def _parse_markdown(text: str) -> tuple[str, list]:
     return plain, _to_telethon_entities(tm_entities)
 
 
+def upload_attachment(filename: str, data_base64: str, attachments_dir: Path) -> str:
+    """Write base64-encoded data to *attachments_dir*/*filename*.
+
+    Args:
+        filename: Basename only — must not contain path separators.
+        data_base64: Base64-encoded file content.
+        attachments_dir: Directory to write into (created if absent).
+
+    Returns:
+        The filename on success.
+    """
+    if "/" in filename or "\\" in filename or filename in (".", ".."):
+        raise ValueError(f"Invalid filename: {filename!r}")
+    attachments_dir.mkdir(parents=True, exist_ok=True)
+    data = base64.b64decode(data_base64)
+    (attachments_dir / filename).write_bytes(data)
+    return filename
+
+
+def _resolve_attachment(filename: str, attachments_dir: Path) -> Path:
+    """Resolve *filename* to a path inside *attachments_dir*, rejecting traversal."""
+    if "/" in filename or "\\" in filename or filename in (".", ".."):
+        raise ValueError(f"Invalid filename: {filename!r}")
+    path = (attachments_dir / filename).resolve()
+    resolved_dir = attachments_dir.resolve()
+    if not path.is_relative_to(resolved_dir):
+        raise ValueError(f"{filename!r} escapes the attachments directory")
+    return path
+
+
 async def send_message(
     client: TelegramClient,
     chat_id: str,
     text: str,
     attachments: list[str] | None = None,
     reply_to_message_id: str | None = None,
+    attachments_dir: Path = Path(".attachments"),
 ) -> str:
     """Send a Markdown-formatted message to *chat_id*.
 
@@ -77,7 +109,7 @@ async def send_message(
     plain, formatting_entities = _parse_markdown(text)
 
     if attachments:
-        files = [Path(p) for p in attachments]
+        files = [_resolve_attachment(name, attachments_dir) for name in attachments]
         if len(files) == 1:
             msg = await client.send_file(
                 peer,

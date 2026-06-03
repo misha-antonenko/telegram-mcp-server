@@ -6,6 +6,7 @@ services:
     volumes:
       - ./server.log:/app/server.log
       - fastmcp_home:/root/.local/share/fastmcp
+      - attachments:/app/.attachments
 
   caddy:
     image: caddy:2-alpine
@@ -23,3 +24,4 @@ services:
 volumes:
   caddy_data:
   fastmcp_home:
+  attachments:

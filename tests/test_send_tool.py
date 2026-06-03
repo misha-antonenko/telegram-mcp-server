@@ -249,16 +249,21 @@ class TestParseMarkdown:
         call_kwargs = client.send_message.call_args
         assert call_kwargs.kwargs.get("reply_to") == 42
 
-    async def test_with_single_attachment(self):
+    async def test_with_single_attachment(self, tmp_path):
         from telegram_mcp_server.tools.send import send_message
 
+        (tmp_path / "photo.jpg").write_bytes(b"data")
         sent = MagicMock()
         sent.id = 300
         client = MagicMock()
         client.send_file = AsyncMock(return_value=sent)
 
         await send_message(
-            client, chat_id=encode_chat(1), text="pic", attachments=["/tmp/photo.jpg"]
+            client,
+            chat_id=encode_chat(1),
+            text="pic",
+            attachments=["photo.jpg"],
+            attachments_dir=tmp_path,
         )
         client.send_file.assert_called_once()
 

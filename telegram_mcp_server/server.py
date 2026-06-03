@@ -21,6 +21,7 @@ from telegram_mcp_server.tools.messages import get_messages as _get_messages
 from telegram_mcp_server.tools.messages import search_messages as _search_messages
 from telegram_mcp_server.tools.send import forward_message as _forward_message
 from telegram_mcp_server.tools.send import send_message as _send_message
+from telegram_mcp_server.tools.send import upload_attachment as _upload_attachment
 from telegram_mcp_server.tools.users import get_user as _get_user
 
 
@@ -191,6 +192,18 @@ async def get_user(user_id: int) -> str:
 
 
 @mcp.tool()
+async def upload_attachment(filename: str, data_base64: str) -> str:
+    """Upload a file to the server's attachments directory so it can be sent via send_message.
+
+    Args:
+        filename: Basename of the file to create (no path separators allowed).
+        data_base64: Base64-encoded file content.
+    """
+    settings = get_settings()
+    return _upload_attachment(filename, data_base64, settings.attachments_dir)
+
+
+@mcp.tool()
 async def send_message(
     chat_id: str,
     text: str,
@@ -202,16 +215,18 @@ async def send_message(
     Args:
         chat_id: Opaque chat ID obtained from get_chats.
         text: Message body in Markdown format.
-        attachments: Optional list of local file paths to attach.
+        attachments: Optional list of filenames previously uploaded via upload_attachment.
         reply_to_message_id: Opaque message ID to reply to (from get_messages).
     """
     client = await get_client()
+    settings = get_settings()
     return await _send_message(
         client,
         chat_id=chat_id,
         text=text,
         attachments=attachments,
         reply_to_message_id=reply_to_message_id,
+        attachments_dir=settings.attachments_dir,
     )
 
 
