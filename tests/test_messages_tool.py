@@ -27,7 +27,7 @@ async def _async_gen(items):
         yield item
 
 
-def _make_client(tl_msgs):
+def _make_client(tl_msgs, read_inbox_max_id: int = 0):
     client = MagicMock()
 
     def _iter_messages_side_effect(*args, **kwargs):
@@ -37,6 +37,18 @@ def _make_client(tl_msgs):
 
     client.iter_messages = MagicMock(side_effect=_iter_messages_side_effect)
     client.get_entity = AsyncMock(side_effect=Exception("no entity"))
+
+    dialog = MagicMock()
+    dialog.read_inbox_max_id = read_inbox_max_id
+    dialogs_result = MagicMock()
+    dialogs_result.dialogs = [dialog]
+
+    # `await client(GetPeerDialogsRequest(...))` requires client() to return a coroutine.
+    async def _call_side_effect(*_args, **_kwargs):
+        return dialogs_result
+
+    client.side_effect = _call_side_effect
+
     return client
 
 
@@ -206,6 +218,29 @@ class TestGetMessages:
         # Within page 0: ascending (first element is oldest of that page)
         page0_nums_ordered = [int(pid.split(":")[2]) for pid in page0_ids]
         assert page0_nums_ordered == sorted(page0_nums_ordered)
+
+    async def test_unread_field_set_for_unread_messages(self):
+        from telegram_mcp_server.tools.messages import get_messages
+
+        # Messages 1–3; read up to id=2 → only id=3 is unread.
+        msgs = [_make_tl_msg(i) for i in [3, 2, 1]]  # newest-first
+        client = _make_client(msgs, read_inbox_max_id=2)
+        result = await get_messages(client, chat_id=encode_chat(1))
+        parsed = yaml.safe_load(result)
+        # page is oldest-first: [id=1, id=2, id=3]
+        by_id = {int(r["id"].split(":")[2]): r for r in parsed}
+        assert "unread" not in by_id[1]
+        assert "unread" not in by_id[2]
+        assert by_id[3].get("unread") is True
+
+    async def test_unread_field_absent_when_all_read(self):
+        from telegram_mcp_server.tools.messages import get_messages
+
+        msgs = [_make_tl_msg(i) for i in [3, 2, 1]]
+        client = _make_client(msgs, read_inbox_max_id=100)
+        result = await get_messages(client, chat_id=encode_chat(1))
+        for row in yaml.safe_load(result):
+            assert "unread" not in row
 
 
 class TestGetMessage:

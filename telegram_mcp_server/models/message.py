@@ -20,6 +20,7 @@ class Message(ToolModel):
     )
     forwarded_from_id: int | None = None  # user/channel ID if forwarded
     reply_to_message_id: str | None = None  # opaque MessageRef of parent, if reply
+    unread: bool | None = None  # True only for unread messages; omitted otherwise
 
     @classmethod
     def from_telethon(cls, msg: TLMessage, peer_id: int) -> Message:

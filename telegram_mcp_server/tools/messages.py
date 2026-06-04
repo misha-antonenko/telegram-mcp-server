@@ -6,6 +6,7 @@ import asyncio
 
 from telethon import TelegramClient
 from telethon import utils as tl_utils
+from telethon.tl.functions.messages import GetPeerDialogsRequest
 
 from telegram_mcp_server.ids import ChatRef, decode_chat, decode_message
 from telegram_mcp_server.models.message import Message
@@ -80,17 +81,26 @@ async def get_messages(
     if search_query:
         kwargs["search"] = search_query
 
+    # Fetch read_inbox_max_id to mark unread messages (only meaningful for specific chats).
+    read_inbox_max_id: int = 0
+    if chat_id is not None and peer_id is not None:
+        try:
+            dialogs_result = await client(GetPeerDialogsRequest(peers=[peer_id]))
+            if dialogs_result.dialogs:
+                read_inbox_max_id = dialogs_result.dialogs[0].read_inbox_max_id
+        except Exception:
+            pass  # leave read_inbox_max_id = 0; no unread marking
+
     # Fetch only the needed page from the server (newest-first, then reverse for display).
     kwargs["limit"] = PAGE_SIZE
     kwargs["add_offset"] = page_idx * PAGE_SIZE
+    tl_messages = [msg async for msg in client.iter_messages(peer_id, **kwargs)]
     page = list(
-        reversed(
-            [
-                Message.from_telethon(msg, peer_id or 0)
-                async for msg in client.iter_messages(peer_id, **kwargs)
-            ]
-        )
+        reversed([Message.from_telethon(msg, peer_id or 0) for msg in tl_messages])
     )
+    for msg, tl_msg in zip(page, reversed(tl_messages)):
+        if tl_msg.id > read_inbox_max_id:
+            msg.unread = True
     await _populate_sender_names(client, page)
     return to_yaml([m.model_dump() for m in page])
 
