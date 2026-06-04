@@ -15,8 +15,25 @@ async def _async_gen(items):
 
 def _make_client(tl_msgs):
     client = MagicMock()
-    client.iter_messages = MagicMock(return_value=_async_gen(tl_msgs))
+
+    def _iter_messages_side_effect(*args, **kwargs):
+        limit = kwargs.get("limit", len(tl_msgs))
+        add_offset = kwargs.get("add_offset", 0)
+        return _async_gen(tl_msgs[add_offset : add_offset + limit])
+
+    client.iter_messages = MagicMock(side_effect=_iter_messages_side_effect)
     client.get_entity = AsyncMock(side_effect=Exception("no entity"))
+
+    dialog = MagicMock()
+    dialog.read_inbox_max_id = 0
+    dialogs_result = MagicMock()
+    dialogs_result.dialogs = [dialog]
+
+    async def _call_side_effect(*_args, **_kwargs):
+        return dialogs_result
+
+    client.side_effect = _call_side_effect
+
     return client
 
 
@@ -41,14 +58,18 @@ class TestSearchMessages:
 
         client = _make_client([])
         await search_messages(client, query="hello", chat_id=encode_chat(1))
-        client.iter_messages.assert_called_once_with(1, search="hello")
+        client.iter_messages.assert_called_once_with(
+            1, search="hello", limit=16, add_offset=0
+        )
 
     async def test_global_search_when_no_chat_id(self):
         from telegram_mcp_server.tools.messages import search_messages
 
         client = _make_client([])
         await search_messages(client, query="hello")
-        client.iter_messages.assert_called_once_with(None, search="hello")
+        client.iter_messages.assert_called_once_with(
+            None, search="hello", limit=16, add_offset=0
+        )
 
     async def test_returns_yaml_list(self):
         from telegram_mcp_server.tools.messages import search_messages
