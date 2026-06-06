@@ -1,6 +1,6 @@
 """Tests for the get_messages and get_message tools."""
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -9,11 +9,14 @@ import yaml
 from telegram_mcp_server.ids import encode_chat, encode_message, encode_topic
 
 
-def _make_tl_msg(msg_id, text="hi"):
+def _make_tl_msg(msg_id, text="hi", msg_date: datetime | None = None):
     msg = MagicMock()
     msg.id = msg_id
     msg.message = text
-    msg.date = datetime(2024, 1, msg_id if msg_id <= 28 else 1, tzinfo=UTC)
+    if msg_date is not None:
+        msg.date = msg_date
+    else:
+        msg.date = datetime(2024, 1, msg_id if msg_id <= 28 else 1, tzinfo=UTC)
     msg.media = None
     msg.from_id = None
     msg.peer_id = None
@@ -33,7 +36,11 @@ def _make_client(tl_msgs, read_inbox_max_id: int = 0):
     def _iter_messages_side_effect(*args, **kwargs):
         limit = kwargs.get("limit", len(tl_msgs))
         add_offset = kwargs.get("add_offset", 0)
-        return _async_gen(tl_msgs[add_offset : add_offset + limit])
+        offset_date = kwargs.get("offset_date")
+        filtered = tl_msgs
+        if offset_date is not None:
+            filtered = [m for m in filtered if m.date < offset_date]
+        return _async_gen(filtered[add_offset : add_offset + limit])
 
     client.iter_messages = MagicMock(side_effect=_iter_messages_side_effect)
     client.get_entity = AsyncMock(side_effect=Exception("no entity"))
@@ -342,6 +349,54 @@ class TestGetMessages:
         result = await get_messages(client, chat_id=encode_chat(1))
         for row in yaml.safe_load(result):
             assert "unread" not in row
+
+    async def test_until_passes_offset_date(self):
+        from telegram_mcp_server.tools.messages import get_messages
+
+        client = _make_client([])
+        await get_messages(client, chat_id=encode_chat(1), until=date(2024, 6, 15))
+        call_kwargs = client.iter_messages.call_args.kwargs
+        assert "offset_date" in call_kwargs
+        assert call_kwargs["offset_date"] == datetime(2024, 6, 15, tzinfo=UTC)
+
+    async def test_since_filters_messages(self):
+        from telegram_mcp_server.tools.messages import get_messages
+
+        msgs = [
+            _make_tl_msg(3, "new", datetime(2024, 6, 20, tzinfo=UTC)),
+            _make_tl_msg(2, "mid", datetime(2024, 6, 10, tzinfo=UTC)),
+            _make_tl_msg(1, "old", datetime(2024, 6, 1, tzinfo=UTC)),
+        ]
+        client = _make_client(msgs)
+        result = await get_messages(
+            client, chat_id=encode_chat(1), since=date(2024, 6, 10)
+        )
+        parsed = yaml.safe_load(result)
+        texts = [m["text"] for m in parsed]
+        assert "old" not in texts
+        assert "mid" in texts
+        assert "new" in texts
+
+    async def test_since_and_until_combined(self):
+        from telegram_mcp_server.tools.messages import get_messages
+
+        msgs = [
+            _make_tl_msg(3, "new", datetime(2024, 6, 20, tzinfo=UTC)),
+            _make_tl_msg(2, "mid", datetime(2024, 6, 10, tzinfo=UTC)),
+            _make_tl_msg(1, "old", datetime(2024, 6, 1, tzinfo=UTC)),
+        ]
+        client = _make_client(msgs)
+        result = await get_messages(
+            client,
+            chat_id=encode_chat(1),
+            since=date(2024, 6, 5),
+            until=date(2024, 6, 15),
+        )
+        call_kwargs = client.iter_messages.call_args.kwargs
+        assert call_kwargs["offset_date"] == datetime(2024, 6, 15, tzinfo=UTC)
+        parsed = yaml.safe_load(result)
+        texts = [m["text"] for m in parsed]
+        assert texts == ["mid"]
 
 
 class TestGetMessage:

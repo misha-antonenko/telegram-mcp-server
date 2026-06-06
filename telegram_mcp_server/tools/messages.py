@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import date, datetime, timezone
 from enum import Enum, auto
 
 from telethon import TelegramClient
@@ -108,11 +109,18 @@ async def _populate_senders(
             msg.sender = name_map.get(msg.sender_id)
 
 
+def _date_to_datetime(d: date) -> datetime:
+    """Convert a date to a timezone-aware datetime at midnight UTC."""
+    return datetime(d.year, d.month, d.day, tzinfo=timezone.utc)
+
+
 async def get_messages(
     client: TelegramClient,
     chat_id: str | None,
     page_idx: int = 0,
     search_query: str = "",
+    since: date | None = None,
+    until: date | None = None,
 ) -> str:
     """Return a YAML-serialised paginated list of messages from *chat_id*.
 
@@ -121,6 +129,10 @@ async def get_messages(
 
     When *chat_id* is None and *search_query* is provided, Telegram performs
     a global search across all chats.
+
+    Args:
+        since: If provided, only return messages from this date onwards (inclusive).
+        until: If provided, only return messages up to this date (exclusive).
     """
     kwargs: dict = {}
 
@@ -136,6 +148,11 @@ async def get_messages(
     if search_query:
         kwargs["search"] = search_query
 
+    if until is not None:
+        kwargs["offset_date"] = _date_to_datetime(until)
+
+    since_dt = _date_to_datetime(since) if since is not None else None
+
     # Fetch read_inbox_max_id to mark unread messages (only meaningful for specific chats).
     read_inbox_max_id: int = 0
     if chat_id is not None and peer_id is not None:
@@ -150,6 +167,11 @@ async def get_messages(
     kwargs["limit"] = PAGE_SIZE
     kwargs["add_offset"] = page_idx * PAGE_SIZE
     tl_messages_raw = [msg async for msg in client.iter_messages(peer_id, **kwargs)]
+
+    # Filter by since date if provided (Telethon has no native min_date).
+    if since_dt is not None:
+        tl_messages_raw = [m for m in tl_messages_raw if m.date >= since_dt]
+
     # Reverse to oldest-first for display; keep parallel lists in sync.
     tl_messages = list(reversed(tl_messages_raw))
     page = [Message.from_telethon(msg, peer_id or 0) for msg in tl_messages]

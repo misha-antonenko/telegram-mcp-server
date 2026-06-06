@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from datetime import date
 
 from fastmcp import FastMCP
 from fastmcp.server.auth import MultiAuth
@@ -153,6 +154,8 @@ async def get_messages(
     chat_id: str | None = None,
     page_idx: int = 0,
     search_query: str = "",
+    since: date | None = None,
+    until: date | None = None,
 ) -> str:
     """Return a paginated list of messages from a chat as YAML.
 
@@ -161,10 +164,17 @@ async def get_messages(
                  When omitted, Telegram performs a global search (requires search_query).
         page_idx: Zero-based page index (16 messages per page).
         search_query: Optional search string; filters messages to those containing it.
+        since: Only return messages from this date onwards (inclusive). Format: YYYY-MM-DD.
+        until: Only return messages up to this date (exclusive). Format: YYYY-MM-DD.
     """
     client = await get_client()
     return await _get_messages(
-        client, chat_id=chat_id, page_idx=page_idx, search_query=search_query
+        client,
+        chat_id=chat_id,
+        page_idx=page_idx,
+        search_query=search_query,
+        since=since,
+        until=until,
     )
 
 
