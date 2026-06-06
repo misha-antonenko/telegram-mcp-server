@@ -19,10 +19,10 @@ from telegram_mcp_server.tools.media import get_image as _get_image
 from telegram_mcp_server.tools.messages import get_message as _get_message
 from telegram_mcp_server.tools.messages import get_messages as _get_messages
 from telegram_mcp_server.tools.messages import search_messages as _search_messages
+from telegram_mcp_server.tools.entities import get_entity as _get_entity
 from telegram_mcp_server.tools.send import forward_message as _forward_message
 from telegram_mcp_server.tools.send import send_message as _send_message
 from telegram_mcp_server.tools.send import upload_attachment as _upload_attachment
-from telegram_mcp_server.tools.users import get_user as _get_user
 
 
 @asynccontextmanager
@@ -181,14 +181,22 @@ async def get_image(media_id: str) -> ImageContent:
 
 
 @mcp.tool()
-async def get_user(user_id: int) -> str:
-    """Return information about a Telegram user as YAML.
+async def get_entity(entity_id: int) -> str:
+    """Return information about a Telegram user, channel, or group as YAML.
 
     Args:
-        user_id: Numeric Telegram user ID.
+        entity_id: Numeric Telegram entity ID (user, channel, or group).
+
+    Returns YAML with fields:
+        id: Numeric ID
+        type: "user", "channel", or "group"
+        name: Display name
+        username: @username if available
+        description: Bio (users) or about text (channels/groups)
+        profile_image_id: Opaque media ID for profile photo
     """
     client = await get_client()
-    return await _get_user(client, user_id)
+    return await _get_entity(client, entity_id)
 
 
 @mcp.tool()
