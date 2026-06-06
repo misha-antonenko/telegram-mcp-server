@@ -123,6 +123,8 @@ async def search_messages(
     query: str,
     chat_id: str | None = None,
     page_idx: int = 0,
+    since: date | None = None,
+    until: date | None = None,
 ) -> str:
     """Search for messages containing a query string, returning results as YAML.
 
@@ -131,10 +133,17 @@ async def search_messages(
         chat_id: Opaque chat ID obtained from get_chats or search_chats.
                  When omitted, Telegram performs a global search across all chats.
         page_idx: Zero-based page index (16 messages per page).
+        since: Only return messages from this date onwards (inclusive). Format: YYYY-MM-DD.
+        until: Only return messages up to this date (exclusive). Format: YYYY-MM-DD.
     """
     client = await get_client()
     return await _search_messages(
-        client, query=query, chat_id=chat_id, page_idx=page_idx
+        client,
+        query=query,
+        chat_id=chat_id,
+        page_idx=page_idx,
+        since=since,
+        until=until,
     )
 
 

@@ -189,6 +189,8 @@ async def search_messages(
     query: str,
     chat_id: str | None = None,
     page_idx: int = 0,
+    since: date | None = None,
+    until: date | None = None,
 ) -> str:
     """Return a YAML-serialised paginated list of messages matching *query*.
 
@@ -196,10 +198,17 @@ async def search_messages(
         query: Non-empty search string.
         chat_id: Opaque chat ID to restrict the search to; when None, searches globally.
         page_idx: Zero-based page index (16 messages per page).
+        since: If provided, only return messages from this date onwards (inclusive).
+        until: If provided, only return messages up to this date (exclusive).
     """
     assert query, "query must be non-empty"
     return await get_messages(
-        client, chat_id=chat_id, page_idx=page_idx, search_query=query
+        client,
+        chat_id=chat_id,
+        page_idx=page_idx,
+        search_query=query,
+        since=since,
+        until=until,
     )
 
 
