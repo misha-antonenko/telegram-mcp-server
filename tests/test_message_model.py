@@ -146,14 +146,14 @@ class TestMessageFromTelethon:
         result = Message.from_telethon(msg, peer_id=1)
         d = result.model_dump()
         assert set(d.keys()) == {"id", "timestamp", "text"}
+        assert "sender" not in d
         assert "sender_id" not in d
-        assert "sender_name" not in d
         assert "forwarded_from_id" not in d
         assert "reply_to_message_id" not in d
 
-    def test_model_dump_includes_sender_name_when_set(self):
+    def test_model_dump_includes_sender_when_set(self):
         msg = _make_msg(message="hi")
         result = Message.from_telethon(msg, peer_id=1)
-        result.sender_name = "Alice (@alice)"
+        result.sender = "Alice (@alice)"
         d = result.model_dump()
-        assert d["sender_name"] == "Alice (@alice)"
+        assert d["sender"] == "Alice (@alice)"

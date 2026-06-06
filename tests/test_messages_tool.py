@@ -128,8 +128,9 @@ class TestGetMessages:
         # Within the page, oldest (id=1) should come first
         assert ids == [encode_message(1, i) for i in [1, 2, 3, 4, 5]]
 
-    async def test_sender_name_populated(self):
-        from telethon.tl.types import PeerUser
+    async def test_sender_populated_in_group(self):
+        """In groups, sender is the formatted name."""
+        from telethon.tl.types import Chat, PeerUser
 
         from telegram_mcp_server.tools.messages import get_messages
 
@@ -139,21 +140,30 @@ class TestGetMessages:
         tl_msg = _make_tl_msg(1, "hi")
         tl_msg.from_id = peer
 
-        entity = MagicMock()
-        entity.first_name = "Alice"
-        entity.last_name = None
-        entity.username = "alice"
+        # Chat entity for the group (to determine chat type).
+        group_entity = MagicMock(spec=Chat)
+
+        # User entity for the sender.
+        user_entity = MagicMock()
+        user_entity.first_name = "Alice"
+        user_entity.last_name = None
+        user_entity.username = "alice"
+
+        async def _get_entity(entity_id):
+            if entity_id == 1:
+                return group_entity
+            return user_entity
 
         client = MagicMock()
         client.iter_messages = MagicMock(
             side_effect=lambda *a, **kw: _async_gen([tl_msg])
         )
-        client.get_entity = AsyncMock(return_value=entity)
+        client.get_entity = AsyncMock(side_effect=_get_entity)
 
         result = await get_messages(client, chat_id=encode_chat(1))
         parsed = yaml.safe_load(result)
-        assert "sender_name" in parsed[0]
-        assert "@alice" in parsed[0]["sender_name"]
+        assert "sender" in parsed[0]
+        assert "@alice" in parsed[0]["sender"]
 
     async def test_none_fields_omitted(self):
         from telegram_mcp_server.tools.messages import get_messages
@@ -162,13 +172,14 @@ class TestGetMessages:
         result = await get_messages(client, chat_id=encode_chat(1))
         parsed = yaml.safe_load(result)
         row = parsed[0]
+        assert "sender" not in row
         assert "sender_id" not in row
-        assert "sender_name" not in row
         assert "forwarded_from_id" not in row
         assert "reply_to_message_id" not in row
 
-    async def test_sender_name_no_username(self):
-        from telethon.tl.types import PeerUser
+    async def test_sender_no_username_in_group(self):
+        """In groups, sender name works without username."""
+        from telethon.tl.types import Chat, PeerUser
 
         from telegram_mcp_server.tools.messages import get_messages
 
@@ -178,23 +189,113 @@ class TestGetMessages:
         tl_msg = _make_tl_msg(1, "hi")
         tl_msg.from_id = peer
 
-        entity = MagicMock()
-        entity.first_name = "Bob"
-        entity.last_name = "Smith"
-        entity.username = None
-        entity.title = None
+        group_entity = MagicMock(spec=Chat)
+        user_entity = MagicMock()
+        user_entity.first_name = "Bob"
+        user_entity.last_name = "Smith"
+        user_entity.username = None
+        user_entity.title = None
+
+        async def _get_entity(entity_id):
+            if entity_id == 1:
+                return group_entity
+            return user_entity
 
         client = MagicMock()
         client.iter_messages = MagicMock(
             side_effect=lambda *a, **kw: _async_gen([tl_msg])
         )
-        client.get_entity = AsyncMock(return_value=entity)
+        client.get_entity = AsyncMock(side_effect=_get_entity)
 
         result = await get_messages(client, chat_id=encode_chat(1))
         parsed = yaml.safe_load(result)
-        sender_name = parsed[0]["sender_name"]
-        assert "@" not in sender_name
-        assert "Bob" in sender_name
+        sender = parsed[0]["sender"]
+        assert "@" not in sender
+        assert "Bob" in sender
+
+    async def test_sender_me_them_in_dm(self):
+        """In DMs, sender is 'me' or 'them'."""
+        import telegram_mcp_server.client as client_module
+        from telethon.tl.types import PeerUser, User
+
+        from telegram_mcp_server.tools.messages import get_messages
+
+        my_id = 100
+
+        peer_me = MagicMock(spec=PeerUser)
+        peer_me.user_id = my_id
+        peer_them = MagicMock(spec=PeerUser)
+        peer_them.user_id = 999
+
+        msg_from_me = _make_tl_msg(1, "from me")
+        msg_from_me.from_id = peer_me
+        msg_from_them = _make_tl_msg(2, "from them")
+        msg_from_them.from_id = peer_them
+
+        dm_entity = MagicMock(spec=User)
+
+        client = MagicMock()
+        client.iter_messages = MagicMock(
+            side_effect=lambda *a, **kw: _async_gen([msg_from_them, msg_from_me])
+        )
+        client.get_entity = AsyncMock(return_value=dm_entity)
+
+        orig = client_module._owner_id
+        client_module._owner_id = my_id
+        try:
+            result = await get_messages(client, chat_id=encode_chat(999))
+            parsed = yaml.safe_load(result)
+        finally:
+            client_module._owner_id = orig
+
+        assert parsed[0]["sender"] == "me"
+        assert parsed[1]["sender"] == "them"
+
+    async def test_sender_omitted_in_channel(self):
+        """In channels without post_author, sender is omitted."""
+        from telethon.tl.types import Channel
+
+        from telegram_mcp_server.tools.messages import get_messages
+
+        tl_msg = _make_tl_msg(1, "channel post")
+        tl_msg.post_author = None
+
+        channel_entity = MagicMock(spec=Channel)
+        channel_entity.megagroup = False
+        channel_entity.gigagroup = False
+
+        client = MagicMock()
+        client.iter_messages = MagicMock(
+            side_effect=lambda *a, **kw: _async_gen([tl_msg])
+        )
+        client.get_entity = AsyncMock(return_value=channel_entity)
+
+        result = await get_messages(client, chat_id=encode_chat(123))
+        parsed = yaml.safe_load(result)
+        assert "sender" not in parsed[0]
+
+    async def test_sender_post_author_in_channel(self):
+        """In channels with signed posts, sender is the post_author."""
+        from telethon.tl.types import Channel
+
+        from telegram_mcp_server.tools.messages import get_messages
+
+        tl_msg = _make_tl_msg(1, "signed post")
+        tl_msg.post_author = "Admin Name"
+
+        channel_entity = MagicMock(spec=Channel)
+        channel_entity.megagroup = False
+        channel_entity.gigagroup = False
+
+        client = MagicMock()
+        client.iter_messages = MagicMock(
+            side_effect=lambda *a, **kw: _async_gen([tl_msg])
+        )
+        client.get_entity = AsyncMock(return_value=channel_entity)
+
+        result = await get_messages(client, chat_id=encode_chat(123))
+        parsed = yaml.safe_load(result)
+        assert parsed[0]["sender"] == "Admin Name"
 
     async def test_pages_descending_across_page_boundary(self):
         from telegram_mcp_server.tools.messages import get_messages
@@ -268,8 +369,9 @@ class TestGetMessage:
         await get_message(client, message_id=encode_message(1234, 42))
         client.get_messages.assert_called_once_with(1234, ids=42)
 
-    async def test_sender_name_populated(self):
-        from telethon.tl.types import PeerUser
+    async def test_sender_populated_in_group(self):
+        """get_message in a group shows full sender name."""
+        from telethon.tl.types import Chat, PeerUser
 
         from telegram_mcp_server.tools.messages import get_message
 
@@ -279,21 +381,27 @@ class TestGetMessage:
         tl_msg = _make_tl_msg(1, "hello")
         tl_msg.from_id = peer
 
-        entity = MagicMock()
-        entity.first_name = "Carol"
-        entity.last_name = None
-        entity.username = "carol"
-        entity.title = None
+        group_entity = MagicMock(spec=Chat)
+        user_entity = MagicMock()
+        user_entity.first_name = "Carol"
+        user_entity.last_name = None
+        user_entity.username = "carol"
+        user_entity.title = None
+
+        async def _get_entity(entity_id):
+            if entity_id == 1:
+                return group_entity
+            return user_entity
 
         client = MagicMock()
         client.get_messages = AsyncMock(return_value=tl_msg)
-        client.get_entity = AsyncMock(return_value=entity)
+        client.get_entity = AsyncMock(side_effect=_get_entity)
 
         result = await get_message(client, message_id=encode_message(1, 1))
         parsed = yaml.safe_load(result)
-        assert "sender_name" in parsed
-        assert "Carol" in parsed["sender_name"]
-        assert "@carol" in parsed["sender_name"]
+        assert "sender" in parsed
+        assert "Carol" in parsed["sender"]
+        assert "@carol" in parsed["sender"]
 
     async def test_not_found_raises(self):
         from telegram_mcp_server.tools.messages import get_message

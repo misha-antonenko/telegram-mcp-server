@@ -4,6 +4,8 @@ from datetime import datetime, timezone, timedelta
 from typing import TYPE_CHECKING
 
 
+from pydantic import Field
+
 from telegram_mcp_server.ids import encode_message, encode_message_media
 from telegram_mcp_server.models.base import ToolModel
 
@@ -17,10 +19,13 @@ class Message(ToolModel):
     text: (
         str  # may contain <sticker .../> markers or opaque media IDs for unknown media
     )
-    sender_id: int | None = None
-    sender_name: str | None = (
-        None  # "Full Name (@username)" or "Full Name"; None if unknown
-    )
+    # Sender representation depends on chat type:
+    #   DMs: "me" or "them"
+    #   Channels: None (omitted)
+    #   Groups: "Full Name (@username)" or "Full Name"
+    sender: str | None = None
+    # Internal: raw sender ID for populating `sender` after construction.
+    sender_id: int | None = Field(default=None, exclude=True)
     forwarded_from_id: int | None = None  # user/channel ID if forwarded
     reply_to_message_id: str | None = None  # opaque MessageRef of parent, if reply
     unread: bool | None = None  # True only for unread messages; omitted otherwise
@@ -51,7 +56,6 @@ class Message(ToolModel):
             timestamp=timestamp,
             text=text,
             sender_id=sender_id,
-            sender_name=None,
             forwarded_from_id=fwd_id,
             reply_to_message_id=reply_to_id,
             image=image,

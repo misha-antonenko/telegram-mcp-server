@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+from enum import Enum, auto
 
 from telethon import TelegramClient
 from telethon import utils as tl_utils
 from telethon.tl.functions.messages import GetPeerDialogsRequest
+from telethon.tl.types import Channel, User
 
+from telegram_mcp_server.client import get_owner_id
 from telegram_mcp_server.ids import ChatRef, decode_chat, decode_message
 from telegram_mcp_server.models.message import Message
 from telegram_mcp_server.yaml_utils import to_yaml
@@ -15,10 +18,16 @@ from telegram_mcp_server.yaml_utils import to_yaml
 PAGE_SIZE = 16
 
 
+class _ChatType(Enum):
+    DM = auto()  # 1:1 chat with a user
+    CHANNEL = auto()  # broadcast channel (not a group)
+    GROUP = auto()  # group chat (basic group, supergroup, megagroup)
+    UNKNOWN = auto()  # global search or unknown entity
+
+
 def _format_sender_name(entity: object) -> str:
     name = tl_utils.get_display_name(entity)
     if not name:
-        # Fallback: entity may not be a standard Telethon type (e.g. a stub)
         name = (
             getattr(entity, "title", None)
             or getattr(entity, "first_name", None)
@@ -31,10 +40,56 @@ def _format_sender_name(entity: object) -> str:
     return name
 
 
-async def _populate_sender_names(
-    client: TelegramClient, messages: list[Message]
+async def _get_chat_type(client: TelegramClient, peer_id: int | None) -> _ChatType:
+    """Determine the chat type for sender simplification."""
+    if peer_id is None:
+        return _ChatType.UNKNOWN
+    try:
+        entity = await client.get_entity(peer_id)
+    except Exception:
+        return _ChatType.UNKNOWN
+
+    if isinstance(entity, User):
+        return _ChatType.DM
+    if isinstance(entity, Channel):
+        is_group = getattr(entity, "megagroup", False) or getattr(
+            entity, "gigagroup", False
+        )
+        return _ChatType.GROUP if is_group else _ChatType.CHANNEL
+    # Basic Chat type is always a group.
+    return _ChatType.GROUP
+
+
+async def _populate_senders(
+    client: TelegramClient,
+    messages: list[Message],
+    tl_messages: list,
+    chat_type: _ChatType,
 ) -> None:
-    """Fetch sender entities concurrently and set sender_name on each message."""
+    """Set `sender` on each message based on chat type.
+
+    - DM: "me" or "them"
+    - Channel: post_author if signed, else None (omitted)
+    - Group/Unknown: "Full Name (@username)"
+
+    *tl_messages* must be in the same order as *messages* (oldest-first after reversal).
+    """
+    if chat_type == _ChatType.CHANNEL:
+        # Channel posts may have a signature (post_author).
+        for msg, tl_msg in zip(messages, tl_messages):
+            author = getattr(tl_msg, "post_author", None)
+            if author:
+                msg.sender = author
+        return
+
+    if chat_type == _ChatType.DM:
+        my_id = get_owner_id()
+        for msg in messages:
+            if msg.sender_id is not None:
+                msg.sender = "me" if msg.sender_id == my_id else "them"
+        return
+
+    # Group or unknown: fetch sender names.
     ids = {m.sender_id for m in messages if m.sender_id is not None}
     if not ids:
         return
@@ -50,7 +105,7 @@ async def _populate_sender_names(
     name_map = {eid: name for r in results if r is not None for eid, name in [r]}
     for msg in messages:
         if msg.sender_id is not None:
-            msg.sender_name = name_map.get(msg.sender_id)
+            msg.sender = name_map.get(msg.sender_id)
 
 
 async def get_messages(
@@ -94,14 +149,16 @@ async def get_messages(
     # Fetch only the needed page from the server (newest-first, then reverse for display).
     kwargs["limit"] = PAGE_SIZE
     kwargs["add_offset"] = page_idx * PAGE_SIZE
-    tl_messages = [msg async for msg in client.iter_messages(peer_id, **kwargs)]
-    page = list(
-        reversed([Message.from_telethon(msg, peer_id or 0) for msg in tl_messages])
-    )
-    for msg, tl_msg in zip(page, reversed(tl_messages)):
+    tl_messages_raw = [msg async for msg in client.iter_messages(peer_id, **kwargs)]
+    # Reverse to oldest-first for display; keep parallel lists in sync.
+    tl_messages = list(reversed(tl_messages_raw))
+    page = [Message.from_telethon(msg, peer_id or 0) for msg in tl_messages]
+    for msg, tl_msg in zip(page, tl_messages):
         if tl_msg.id > read_inbox_max_id:
             msg.unread = True
-    await _populate_sender_names(client, page)
+
+    chat_type = await _get_chat_type(client, peer_id)
+    await _populate_senders(client, page, tl_messages, chat_type)
     return to_yaml([m.model_dump() for m in page])
 
 
@@ -130,5 +187,6 @@ async def get_message(client: TelegramClient, message_id: str) -> str:
     tl_msg = await client.get_messages(ref.peer_id, ids=ref.msg_id)
     assert tl_msg is not None, f"Message not found: {message_id!r}"
     msg = Message.from_telethon(tl_msg, ref.peer_id)
-    await _populate_sender_names(client, [msg])
+    chat_type = await _get_chat_type(client, ref.peer_id)
+    await _populate_senders(client, [msg], [tl_msg], chat_type)
     return to_yaml(msg.model_dump())
