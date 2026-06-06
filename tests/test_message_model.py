@@ -36,13 +36,57 @@ class TestMessageFromTelethon:
         result = Message.from_telethon(msg, peer_id=1)
         assert result.timestamp == "2024-06-15 16:30"  # UTC+4
 
-    def test_media_replaced_by_id(self):
+    def test_photo_caption_and_image_field(self):
+        from telethon.tl.types import MessageMediaPhoto
+
+        photo = MagicMock(spec=MessageMediaPhoto)
+        msg = _make_msg(id=7, media=photo, message="my caption")
+        result = Message.from_telethon(msg, peer_id=200)
+        assert result.text == "my caption"
+        assert result.image == encode_message_media(200, 7)
+        assert result.audio is None
+        assert result.video is None
+
+    def test_photo_no_caption(self):
         from telethon.tl.types import MessageMediaPhoto
 
         photo = MagicMock(spec=MessageMediaPhoto)
         msg = _make_msg(id=7, media=photo, message="")
         result = Message.from_telethon(msg, peer_id=200)
-        assert result.text == encode_message_media(200, 7)
+        assert result.text == ""
+        assert result.image == encode_message_media(200, 7)
+
+    def test_audio_caption_and_audio_field(self):
+        from telethon.tl.types import DocumentAttributeAudio, MessageMediaDocument
+
+        attr = MagicMock(spec=DocumentAttributeAudio)
+        doc = MagicMock()
+        doc.id = 111
+        doc.attributes = [attr]
+        media = MagicMock(spec=MessageMediaDocument)
+        media.document = doc
+        msg = _make_msg(id=8, media=media, message="song caption")
+        result = Message.from_telethon(msg, peer_id=10)
+        assert result.text == "song caption"
+        assert result.audio == encode_message_media(10, 8)
+        assert result.image is None
+        assert result.video is None
+
+    def test_video_caption_and_video_field(self):
+        from telethon.tl.types import DocumentAttributeVideo, MessageMediaDocument
+
+        attr = MagicMock(spec=DocumentAttributeVideo)
+        doc = MagicMock()
+        doc.id = 222
+        doc.attributes = [attr]
+        media = MagicMock(spec=MessageMediaDocument)
+        media.document = doc
+        msg = _make_msg(id=9, media=media, message="clip caption")
+        result = Message.from_telethon(msg, peer_id=10)
+        assert result.text == "clip caption"
+        assert result.video == encode_message_media(10, 9)
+        assert result.image is None
+        assert result.audio is None
 
     def test_sticker_replaced_by_xml(self):
         from telethon.tl.types import (

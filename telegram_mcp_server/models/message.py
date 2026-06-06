@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone, timedelta
 from typing import TYPE_CHECKING
 
+
 from telegram_mcp_server.ids import encode_message, encode_message_media
 from telegram_mcp_server.models.base import ToolModel
 
@@ -13,7 +14,9 @@ if TYPE_CHECKING:
 class Message(ToolModel):
     id: str  # opaque MessageRef
     timestamp: str  # "YYYY-MM-DD HH:MM" in UTC+4
-    text: str  # may contain <sticker .../> markers or media ID strings
+    text: (
+        str  # may contain <sticker .../> markers or opaque media IDs for unknown media
+    )
     sender_id: int | None = None
     sender_name: str | None = (
         None  # "Full Name (@username)" or "Full Name"; None if unknown
@@ -21,6 +24,9 @@ class Message(ToolModel):
     forwarded_from_id: int | None = None  # user/channel ID if forwarded
     reply_to_message_id: str | None = None  # opaque MessageRef of parent, if reply
     unread: bool | None = None  # True only for unread messages; omitted otherwise
+    image: str | None = None  # opaque media handle when message contains a photo
+    audio: str | None = None  # opaque media handle when message contains audio/voice
+    video: str | None = None  # opaque media handle when message contains video
 
     @classmethod
     def from_telethon(cls, msg: TLMessage, peer_id: int) -> Message:
@@ -31,7 +37,7 @@ class Message(ToolModel):
         """
         msg_id_str = encode_message(peer_id, msg.id)
         timestamp = _format_ts(msg.date)
-        text = _extract_text(msg, peer_id)
+        text, image, audio, video = _extract_media(msg, peer_id)
         sender_id = _sender_id(msg)
         fwd_id = _forwarded_from_id(msg)
         reply_to_id: str | None = None
@@ -48,6 +54,9 @@ class Message(ToolModel):
             sender_name=None,
             forwarded_from_id=fwd_id,
             reply_to_message_id=reply_to_id,
+            image=image,
+            audio=audio,
+            video=video,
         )
 
 
@@ -65,17 +74,66 @@ def _format_ts(dt: datetime | None) -> str:
     return dt.astimezone(_UTC4).strftime("%Y-%m-%d %H:%M")
 
 
-def _extract_text(msg: TLMessage, peer_id: int) -> str:
-    # Check for sticker first (Document with DocumentAttributeSticker)
+def _extract_media(
+    msg: TLMessage, peer_id: int
+) -> tuple[str, str | None, str | None, str | None]:
+    """Return (text, image, audio, video) for a message.
+
+    For typed media (photo/audio/video), *text* is the caption and the handle
+    goes into the corresponding typed field.  For stickers, *text* carries the
+    XML marker.  For other unrecognised media the handle is placed in *text*.
+    Webpage attachments are ignored so the message text passes through.
+    """
+    # Sticker — highest priority
     sticker_xml = _try_sticker(msg)
     if sticker_xml:
-        return sticker_xml
+        return sticker_xml, None, None, None
 
-    # Other media: replace with opaque media ID
-    if getattr(msg, "media", None) is not None and not _is_webpage(msg):
-        return encode_message_media(peer_id, msg.id)
+    media = getattr(msg, "media", None)
+    if media is None or _is_webpage(msg):
+        return getattr(msg, "message", "") or "", None, None, None
 
-    return getattr(msg, "message", "") or ""
+    handle = encode_message_media(peer_id, msg.id)
+    caption: str = getattr(msg, "message", "") or ""
+
+    from telethon.tl.types import MessageMediaPhoto, MessageMediaDocument
+
+    if isinstance(media, MessageMediaPhoto):
+        return caption, handle, None, None
+
+    if isinstance(media, MessageMediaDocument):
+        kind = _document_kind(media)
+        if kind == "audio":
+            return caption, None, handle, None
+        if kind == "video":
+            return caption, None, None, handle
+        if kind == "sticker":
+            # Handled above; shouldn't reach here, but be safe.
+            return caption, None, None, None
+
+    # Unknown media type: put the handle in text (preserve old behaviour).
+    return handle, None, None, None
+
+
+def _document_kind(media: object) -> str | None:
+    """Return 'sticker', 'audio', or 'video' based on document attributes."""
+    from telethon.tl.types import (
+        DocumentAttributeSticker,
+        DocumentAttributeAudio,
+        DocumentAttributeVideo,
+    )
+
+    doc = getattr(media, "document", None)
+    if doc is None:
+        return None
+    for attr in getattr(doc, "attributes", []):
+        if isinstance(attr, DocumentAttributeSticker):
+            return "sticker"
+        if isinstance(attr, DocumentAttributeAudio):
+            return "audio"
+        if isinstance(attr, DocumentAttributeVideo):
+            return "video"
+    return None
 
 
 def _try_sticker(msg: TLMessage) -> str | None:
