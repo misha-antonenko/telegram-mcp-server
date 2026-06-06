@@ -53,3 +53,14 @@ def test_special_yaml_chars_in_string():
     text = "key: value # comment"
     result = _roundtrip({"msg": text})
     assert result == {"msg": text}
+
+
+def test_multiline_with_trailing_spaces_uses_block_style():
+    # Trailing whitespace before newlines should not cause quoted style
+    text = "line one \nline two  \nline three"
+    dumped = to_yaml({"key": text})
+    assert "|\n" in dumped or "|-\n" in dumped
+    assert "\\n" not in dumped  # no escaped newlines
+    # Trailing spaces are stripped
+    result = _roundtrip({"key": text})
+    assert result == {"key": "line one\nline two\nline three"}

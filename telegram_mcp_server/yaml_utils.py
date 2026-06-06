@@ -29,7 +29,10 @@ def _literal_representer(dumper: yaml.Dumper, data: str) -> yaml.ScalarNode:
 
 def _str_representer(dumper: yaml.Dumper, data: str) -> yaml.ScalarNode:
     if "\n" in data:
-        return dumper.represent_scalar("tag:yaml.org,2002:str", data, style="|")
+        # Strip trailing whitespace from each line to ensure block style works.
+        # PyYAML falls back to quoted style if trailing whitespace would be lost.
+        cleaned = "\n".join(line.rstrip() for line in data.split("\n"))
+        return dumper.represent_scalar("tag:yaml.org,2002:str", cleaned, style="|")
     return dumper.represent_scalar("tag:yaml.org,2002:str", data)
 
 
