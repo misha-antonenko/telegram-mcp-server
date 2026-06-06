@@ -217,21 +217,16 @@ async def get_chats(
             sender_id_map: dict[int, int | None] = {
                 m.id: _msg_sender_id(m) for m in topics_result.messages
             }
-            msg_map: dict[int, str] = {
-                m.id: (m.message or "") for m in topics_result.messages
-            }
             date_map: dict[int, object] = {
                 m.id: getattr(m, "date", None) for m in topics_result.messages
             }
             forum_name = getattr(entity, "title", "") or ""
             for topic in topics_result.topics:
-                last_text = msg_map.get(topic.top_message, "")
                 entries.append(
                     ChatModel.from_topic(
                         supergroup_id=entity.id,
                         forum_name=forum_name,
                         topic=topic,
-                        last_message_text=last_text,
                         has_unread=topic.unread_count > 0,
                         last_sender_id=sender_id_map.get(topic.top_message),
                         last_message_date=date_map.get(topic.top_message),

@@ -15,7 +15,6 @@ if TYPE_CHECKING:
 class Chat(ToolModel):
     id: str  # opaque ChatRef encoded string
     name: str
-    preview: str  # ≤32 characters of the last message
     has_unread: bool
     last_sender: str | None = None  # "me" or "them"
     # Not serialised; used for sorting and sender resolution inside get_chats.
@@ -28,14 +27,12 @@ class Chat(ToolModel):
         entity = dialog.entity
         peer_id = _peer_id(entity)
         name = _entity_name(entity)
-        preview = _preview(dialog.message)
         has_unread = dialog.unread_count > 0
         sender_id = _msg_sender_id(dialog.message)
         date = getattr(dialog.message, "date", None) if dialog.message else None
         return cls(
             id=encode_chat(peer_id),
             name=name,
-            preview=preview,
             has_unread=has_unread,
             last_sender_id=sender_id,
             last_message_date=date,
@@ -47,7 +44,6 @@ class Chat(ToolModel):
         supergroup_id: int,
         forum_name: str,
         topic: ForumTopic,
-        last_message_text: str,
         has_unread: bool,
         last_sender_id: int | None = None,
         last_message_date: datetime | None = None,
@@ -56,7 +52,6 @@ class Chat(ToolModel):
         return cls(
             id=encode_topic(supergroup_id, topic.id),
             name=f"{forum_name} / {topic.title}",
-            preview=_truncate(last_message_text),
             has_unread=has_unread,
             last_sender_id=last_sender_id,
             last_message_date=last_message_date,
@@ -100,21 +95,3 @@ def _entity_name(entity: object) -> str:
     if username:
         return f"{base} (@{username})"
     return base
-
-
-def _truncate(text: str, limit: int = 32) -> str:
-    if len(text) <= limit:
-        return text
-    return text[: limit - 1] + "…"
-
-
-def _preview(message: object | None) -> str:
-    if message is None:
-        return ""
-    text: str = getattr(message, "message", "") or getattr(message, "text", "") or ""
-    if not text:
-        # Summarise media type
-        media = getattr(message, "media", None)
-        if media is not None:
-            text = f"[{type(media).__name__}]"
-    return _truncate(text)
