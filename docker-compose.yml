@@ -7,21 +7,13 @@ services:
       - ./server.log:/app/server.log
       - fastmcp_home:/root/.local/share/fastmcp
       - attachments:/app/.attachments
-
-  caddy:
-    image: caddy:2-alpine
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-    env_file: .env
-    restart: unless-stopped
-    depends_on:
-      - telegram-mcp-server
+    networks:
+      - caddy-net
 
 volumes:
-  caddy_data:
   fastmcp_home:
   attachments:
+
+networks:
+  caddy-net:
+    external: true
