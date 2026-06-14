@@ -17,6 +17,7 @@ from telegram_mcp_server.tools.chats import get_chats as _get_chats
 from telegram_mcp_server.tools.chats import get_folders as _get_folders
 from telegram_mcp_server.tools.chats import search_chats as _search_chats
 from telegram_mcp_server.tools.media import get_image as _get_image
+from telegram_mcp_server.tools.messages import count_messages as _count_messages
 from telegram_mcp_server.tools.messages import get_message as _get_message
 from telegram_mcp_server.tools.messages import get_messages as _get_messages
 from telegram_mcp_server.tools.messages import search_messages as _search_messages
@@ -162,32 +163,43 @@ async def get_message(message_id: str) -> str:
 
 @mcp.tool()
 async def get_messages(
-    chat_id: str | None = None,
-    page_idx: int = 0,
-    search_query: str = "",
+    chat_id: str,
     since: date | None = None,
-    until: date | None = None,
+    page_idx: int = 0,
 ) -> str:
     """Return a paginated list of messages from a chat as YAML.
 
+    Messages are ordered oldest-first. Use search_messages for text search.
+
     Args:
-        chat_id: Opaque chat ID obtained from get_chats.
-                 When omitted, Telegram performs a global search (requires search_query).
-        page_idx: Zero-based page index (16 messages per page). The older the message,
-                  the higher the index.
-        search_query: Optional search string; filters messages to those containing it.
-        since: Only return messages from this date onwards (inclusive). Format: YYYY-MM-DD.
-        until: Only return messages up to this date (exclusive). Format: YYYY-MM-DD.
+        chat_id: Opaque chat ID obtained from get_chats or search_chats.
+        since: Only include messages from this date onwards (inclusive). Format: YYYY-MM-DD.
+        page_idx: Zero-based page index (16 messages per page).
     """
     client = await get_client()
     return await _get_messages(
         client,
         chat_id=chat_id,
-        page_idx=page_idx,
-        search_query=search_query,
         since=since,
-        until=until,
+        page_idx=page_idx,
     )
+
+
+@mcp.tool()
+async def count_messages(
+    chat_id: str,
+    since: date | None = None,
+) -> int:
+    """Return the number of messages matching the given filters.
+
+    The meaning of the arguments is the same as in get_messages.
+
+    Args:
+        chat_id: Opaque chat ID obtained from get_chats or search_chats.
+        since: Only count messages from this date onwards (inclusive). Format: YYYY-MM-DD.
+    """
+    client = await get_client()
+    return await _count_messages(client, chat_id=chat_id, since=since)
 
 
 @mcp.tool()

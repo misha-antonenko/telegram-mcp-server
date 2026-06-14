@@ -1,4 +1,4 @@
-"""Tests for the get_messages and get_message tools."""
+"""Tests for the get_messages, count_messages, and get_message tools."""
 
 from datetime import UTC, date, datetime
 from unittest.mock import AsyncMock, MagicMock
@@ -27,6 +27,7 @@ def _make_tl_msg(msg_id, text="hi", msg_date: datetime | None = None):
 
 
 def _make_client(tl_msgs, read_inbox_max_id: int = 0):
+    """Build a mock client for get_messages (reverse=True, oldest-first)."""
     client = MagicMock()
 
     async def _get_messages_side_effect(*args, **kwargs):
@@ -34,8 +35,9 @@ def _make_client(tl_msgs, read_inbox_max_id: int = 0):
         add_offset = kwargs.get("add_offset", 0)
         offset_date = kwargs.get("offset_date")
         filtered = tl_msgs
+        # With reverse=True, offset_date is the start point (messages >= offset_date).
         if offset_date is not None:
-            filtered = [m for m in filtered if m.date < offset_date]
+            filtered = [m for m in filtered if m.date >= offset_date]
         page = filtered[add_offset : add_offset + limit]
         result = TotalList(page)
         result.total = len(filtered)
@@ -96,6 +98,7 @@ class TestGetMessages:
     async def test_pagination(self):
         from telegram_mcp_server.tools.messages import get_messages
 
+        # Oldest-first: ids 1..20
         msgs = [_make_tl_msg(i, f"msg{i}") for i in range(1, 21)]
         client = _make_client(msgs)
         result = await get_messages(client, chat_id=encode_chat(1), page_idx=0)
@@ -111,7 +114,7 @@ class TestGetMessages:
         client = _make_client([])
         await get_messages(client, chat_id=encode_topic(200, 5))
         client.get_messages.assert_called_once_with(
-            200, reply_to=5, limit=16, add_offset=0
+            200, reverse=True, reply_to=5, limit=16, add_offset=0
         )
 
     async def test_regular_chat_no_reply_to(self):
@@ -119,43 +122,20 @@ class TestGetMessages:
 
         client = _make_client([])
         await get_messages(client, chat_id=encode_chat(300))
-        client.get_messages.assert_called_once_with(300, limit=16, add_offset=0)
-
-    async def test_search_query_passed(self):
-        from telegram_mcp_server.tools.messages import get_messages
-
-        client = _make_client([])
-        await get_messages(client, chat_id=encode_chat(300), search_query="hello")
         client.get_messages.assert_called_once_with(
-            300, search="hello", limit=16, add_offset=0
+            300, reverse=True, limit=16, add_offset=0
         )
 
-    async def test_empty_search_query_not_passed(self):
+    async def test_oldest_first_order(self):
         from telegram_mcp_server.tools.messages import get_messages
 
-        client = _make_client([])
-        await get_messages(client, chat_id=encode_chat(300), search_query="")
-        client.get_messages.assert_called_once_with(300, limit=16, add_offset=0)
-
-    async def test_none_chat_id_passes_none_peer(self):
-        from telegram_mcp_server.tools.messages import get_messages
-
-        client = _make_client([])
-        await get_messages(client, chat_id=None, search_query="global")
-        client.get_messages.assert_called_once_with(
-            None, search="global", limit=16, add_offset=0
-        )
-
-    async def test_page_ascending_order(self):
-        from telegram_mcp_server.tools.messages import get_messages
-
-        # get_messages returns newest-first (ids 5,4,3,2,1)
-        msgs = [_make_tl_msg(i) for i in [5, 4, 3, 2, 1]]
+        # Already oldest-first (as reverse=True would return).
+        msgs = [_make_tl_msg(i) for i in [1, 2, 3, 4, 5]]
         client = _make_client(msgs)
         result = await get_messages(client, chat_id=encode_chat(1), page_idx=0)
         parsed = _parse_messages(result)
-        ids = [p["id"] for p in parsed]
-        assert ids == [encode_message(1, i) for i in [1, 2, 3, 4, 5]]
+        ids = [int(p["id"].split(":")[2]) for p in parsed]
+        assert ids == [1, 2, 3, 4, 5]
 
     async def test_sender_populated_in_group(self):
         """In groups, sender is the formatted name."""
@@ -254,7 +234,8 @@ class TestGetMessages:
 
         dm_entity = MagicMock(spec=User)
 
-        client = _make_sender_client([msg_from_them, msg_from_me])
+        # Oldest-first: me first, then them.
+        client = _make_sender_client([msg_from_me, msg_from_them])
         client.get_entity = AsyncMock(return_value=dm_entity)
 
         orig = client_module._owner_id
@@ -308,31 +289,30 @@ class TestGetMessages:
         parsed = _parse_messages(result)
         assert parsed[0]["sender"] == "Admin Name"
 
-    async def test_pages_descending_across_page_boundary(self):
+    async def test_pages_ascending_across_page_boundary(self):
         from telegram_mcp_server.tools.messages import get_messages
 
-        # get_messages returns 20 msgs newest-first: ids 20..1
-        msgs = [_make_tl_msg(i) for i in range(20, 0, -1)]
+        # Oldest-first: ids 1..20
+        msgs = [_make_tl_msg(i) for i in range(1, 21)]
         client = _make_client(msgs)
         result0 = await get_messages(client, chat_id=encode_chat(1), page_idx=0)
 
         client = _make_client(msgs)
         result1 = await get_messages(client, chat_id=encode_chat(1), page_idx=1)
 
-        page0_ids = [p["id"] for p in _parse_messages(result0)]
-        page1_ids = [p["id"] for p in _parse_messages(result1)]
+        page0_nums = [int(p["id"].split(":")[2]) for p in _parse_messages(result0)]
+        page1_nums = [int(p["id"].split(":")[2]) for p in _parse_messages(result1)]
 
-        page0_nums = {int(pid.split(":")[2]) for pid in page0_ids}
-        page1_nums = {int(pid.split(":")[2]) for pid in page1_ids}
-        assert min(page0_nums) > max(page1_nums)
-
-        page0_nums_ordered = [int(pid.split(":")[2]) for pid in page0_ids]
-        assert page0_nums_ordered == sorted(page0_nums_ordered)
+        # Page 0 = ids 1..16 (oldest), page 1 = ids 17..20.
+        assert max(page0_nums) < min(page1_nums)
+        assert page0_nums == sorted(page0_nums)
+        assert page1_nums == sorted(page1_nums)
 
     async def test_unread_field_set_for_unread_messages(self):
         from telegram_mcp_server.tools.messages import get_messages
 
-        msgs = [_make_tl_msg(i) for i in [3, 2, 1]]
+        # Oldest-first.
+        msgs = [_make_tl_msg(i) for i in [1, 2, 3]]
         client = _make_client(msgs, read_inbox_max_id=2)
         result = await get_messages(client, chat_id=encode_chat(1))
         parsed = _parse_messages(result)
@@ -344,28 +324,28 @@ class TestGetMessages:
     async def test_unread_field_absent_when_all_read(self):
         from telegram_mcp_server.tools.messages import get_messages
 
-        msgs = [_make_tl_msg(i) for i in [3, 2, 1]]
+        msgs = [_make_tl_msg(i) for i in [1, 2, 3]]
         client = _make_client(msgs, read_inbox_max_id=100)
         result = await get_messages(client, chat_id=encode_chat(1))
         for row in _parse_messages(result):
             assert "unread" not in row
 
-    async def test_until_passes_offset_date(self):
+    async def test_since_passes_offset_date(self):
         from telegram_mcp_server.tools.messages import get_messages
 
         client = _make_client([])
-        await get_messages(client, chat_id=encode_chat(1), until=date(2024, 6, 15))
+        await get_messages(client, chat_id=encode_chat(1), since=date(2024, 6, 15))
         call_kwargs = client.get_messages.call_args.kwargs
-        assert "offset_date" in call_kwargs
         assert call_kwargs["offset_date"] == datetime(2024, 6, 15, tzinfo=UTC)
 
-    async def test_since_filters_messages(self):
+    async def test_since_filters_server_side(self):
         from telegram_mcp_server.tools.messages import get_messages
 
+        # Oldest-first.
         msgs = [
-            _make_tl_msg(3, "new", datetime(2024, 6, 20, tzinfo=UTC)),
-            _make_tl_msg(2, "mid", datetime(2024, 6, 10, tzinfo=UTC)),
             _make_tl_msg(1, "old", datetime(2024, 6, 1, tzinfo=UTC)),
+            _make_tl_msg(2, "mid", datetime(2024, 6, 10, tzinfo=UTC)),
+            _make_tl_msg(3, "new", datetime(2024, 6, 20, tzinfo=UTC)),
         ]
         client = _make_client(msgs)
         result = await get_messages(
@@ -376,41 +356,20 @@ class TestGetMessages:
         assert "mid" in texts
         assert "new" in texts
 
-    async def test_since_and_until_combined(self):
-        from telegram_mcp_server.tools.messages import get_messages
-
-        msgs = [
-            _make_tl_msg(3, "new", datetime(2024, 6, 20, tzinfo=UTC)),
-            _make_tl_msg(2, "mid", datetime(2024, 6, 10, tzinfo=UTC)),
-            _make_tl_msg(1, "old", datetime(2024, 6, 1, tzinfo=UTC)),
-        ]
-        client = _make_client(msgs)
-        result = await get_messages(
-            client,
-            chat_id=encode_chat(1),
-            since=date(2024, 6, 5),
-            until=date(2024, 6, 15),
-        )
-        call_kwargs = client.get_messages.call_args.kwargs
-        assert call_kwargs["offset_date"] == datetime(2024, 6, 15, tzinfo=UTC)
-        texts = [m["text"] for m in _parse_messages(result)]
-        assert texts == ["mid"]
-
     async def test_remaining_pages_reported(self):
         from telegram_mcp_server.tools.messages import get_messages
 
-        msgs = [_make_tl_msg(i) for i in range(20, 0, -1)]
+        msgs = [_make_tl_msg(i) for i in range(1, 21)]
         client = _make_client(msgs)
         envelope = _parse_envelope(
             await get_messages(client, chat_id=encode_chat(1), page_idx=0)
         )
-        # 20 total, page 0 fetches 16 → 4 remaining → 1 page
         assert envelope["remaining_pages"] == 1
 
     async def test_remaining_pages_zero_on_last_page(self):
         from telegram_mcp_server.tools.messages import get_messages
 
-        msgs = [_make_tl_msg(i) for i in range(20, 0, -1)]
+        msgs = [_make_tl_msg(i) for i in range(1, 21)]
         client = _make_client(msgs)
         envelope = _parse_envelope(
             await get_messages(client, chat_id=encode_chat(1), page_idx=1)
@@ -420,12 +379,44 @@ class TestGetMessages:
     async def test_remaining_pages_zero_when_fits_in_one_page(self):
         from telegram_mcp_server.tools.messages import get_messages
 
-        msgs = [_make_tl_msg(i) for i in [3, 2, 1]]
+        msgs = [_make_tl_msg(i) for i in [1, 2, 3]]
         client = _make_client(msgs)
         envelope = _parse_envelope(
             await get_messages(client, chat_id=encode_chat(1), page_idx=0)
         )
         assert envelope["remaining_pages"] == 0
+
+
+class TestCountMessages:
+    async def test_returns_total(self):
+        from telegram_mcp_server.tools.messages import count_messages
+
+        msgs = [_make_tl_msg(i) for i in range(1, 21)]
+        client = _make_client(msgs)
+        total = await count_messages(client, chat_id=encode_chat(1))
+        assert total == 20
+
+    async def test_with_since(self):
+        from telegram_mcp_server.tools.messages import count_messages
+
+        msgs = [
+            _make_tl_msg(1, "old", datetime(2024, 6, 1, tzinfo=UTC)),
+            _make_tl_msg(2, "mid", datetime(2024, 6, 10, tzinfo=UTC)),
+            _make_tl_msg(3, "new", datetime(2024, 6, 20, tzinfo=UTC)),
+        ]
+        client = _make_client(msgs)
+        total = await count_messages(
+            client, chat_id=encode_chat(1), since=date(2024, 6, 10)
+        )
+        assert total == 2
+
+    async def test_passes_limit_zero(self):
+        from telegram_mcp_server.tools.messages import count_messages
+
+        client = _make_client([_make_tl_msg(1)])
+        await count_messages(client, chat_id=encode_chat(1))
+        call_kwargs = client.get_messages.call_args.kwargs
+        assert call_kwargs["limit"] == 0
 
 
 class TestGetMessage:
