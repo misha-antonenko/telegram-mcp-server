@@ -133,7 +133,7 @@ async def search_messages(
     Args:
         query: Non-empty search string.
         page_idx: Zero-based page index (16 messages per page).
-        until: Only return messages up to this date (exclusive). Format: YYYY-MM-DD.
+        until: Only return messages up to this date (inclusive). Format: YYYY-MM-DD.
     """
     client = await get_client()
     return await _search_messages(

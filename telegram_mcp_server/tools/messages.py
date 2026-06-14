@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from enum import Enum, auto
 
 from telethon import TelegramClient
@@ -144,7 +144,8 @@ async def get_messages(
     peer_id, kwargs = _build_chat_kwargs(chat_id)
 
     if since is not None:
-        kwargs["offset_date"] = _date_to_datetime(since)
+        # we want inclusivity
+        kwargs["offset_date"] = _date_to_datetime(since) - timedelta(days=1)
 
     if search_query:
         kwargs["search"] = search_query
@@ -199,7 +200,8 @@ async def count_messages(
     peer_id, kwargs = _build_chat_kwargs(chat_id)
 
     if since is not None:
-        kwargs["offset_date"] = _date_to_datetime(since)
+        # we want inclusivity
+        kwargs["offset_date"] = _date_to_datetime(since) - timedelta(days=1)
 
     if search_query:
         kwargs["search"] = search_query
@@ -223,14 +225,15 @@ async def search_messages(
     Args:
         query: Non-empty search string.
         page_idx: Zero-based page index (16 messages per page).
-        until: Only return messages up to this date (exclusive).
+        until: Only return messages up to this date (inclusive).
     """
     assert query, "query must be non-empty"
 
     kwargs: dict = {"search": query}
 
     if until is not None:
-        kwargs["offset_date"] = _date_to_datetime(until)
+        # we want inclusivity
+        kwargs["offset_date"] = _date_to_datetime(until) + timedelta(days=1)
 
     kwargs["limit"] = PAGE_SIZE
     kwargs["add_offset"] = page_idx * PAGE_SIZE
