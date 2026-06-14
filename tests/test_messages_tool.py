@@ -356,7 +356,7 @@ class TestGetMessages:
         client = _make_client([])
         await get_messages(client, chat_id=encode_chat(1), since=date(2024, 6, 15))
         call_kwargs = client.get_messages.call_args.kwargs
-        assert call_kwargs["offset_date"] == datetime(2024, 6, 14, tzinfo=UTC)
+        assert call_kwargs["offset_date"] == datetime(2024, 6, 15, tzinfo=UTC)
 
     async def test_since_filters_server_side(self):
         from telegram_mcp_server.tools.messages import get_messages

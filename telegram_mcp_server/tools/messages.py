@@ -149,7 +149,7 @@ async def get_messages(
     peer_id, kwargs = await _build_chat_kwargs(client, chat_id)
 
     if since is not None:
-        kwargs["offset_date"] = _date_to_datetime(since) - timedelta(days=1)
+        kwargs["offset_date"] = _date_to_datetime(since)
 
     if search_query:
         kwargs["search"] = search_query
