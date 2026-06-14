@@ -11,3 +11,12 @@ https://{$MCP_DOMAIN} {
 	}
 	reverse_proxy telegram-mcp-server:8000
 }
+
+https://sci-hub.mshntnnk.online {
+	tls {
+		issuer acme {
+			disable_tlsalpn_challenge
+		}
+	}
+	reverse_proxy sci-hub-mcp:3000
+}

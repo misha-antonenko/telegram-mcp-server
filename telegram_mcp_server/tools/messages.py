@@ -8,6 +8,7 @@ from enum import Enum, auto
 
 from telethon import TelegramClient
 from telethon import utils as tl_utils
+import telethon.hints
 from telethon.tl.functions.messages import GetPeerDialogsRequest
 from telethon.tl.types import Channel, User
 
@@ -163,10 +164,12 @@ async def get_messages(
         except Exception:
             pass  # leave read_inbox_max_id = 0; no unread marking
 
-    # Fetch only the needed page from the server (newest-first, then reverse for display).
+    # Fetch the needed page (newest-first, then reverse for display).
     kwargs["limit"] = PAGE_SIZE
     kwargs["add_offset"] = page_idx * PAGE_SIZE
-    tl_messages_raw = [msg async for msg in client.iter_messages(peer_id, **kwargs)]
+    tl_messages_raw = await client.get_messages(peer_id, **kwargs)
+    assert isinstance(tl_messages_raw, telethon.hints.TotalList), type(tl_messages_raw)
+    total: int = tl_messages_raw.total
 
     # Filter by since date if provided (Telethon has no native min_date).
     if since_dt is not None:
@@ -181,7 +184,16 @@ async def get_messages(
 
     chat_type = await _get_chat_type(client, peer_id)
     await _populate_senders(client, page, tl_messages, chat_type)
-    return to_yaml([m.model_dump() for m in page])
+
+    fetched_through = (page_idx + 1) * PAGE_SIZE
+    remaining_pages = max(0, -(-max(0, total - fetched_through) // PAGE_SIZE))
+
+    return to_yaml(
+        {
+            "remaining_pages": remaining_pages,
+            "messages": [m.model_dump() for m in page],
+        }
+    )
 
 
 async def search_messages(

@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import yaml
+from telethon.helpers import TotalList
 
 from telegram_mcp_server.ids import encode_chat, encode_message, encode_topic
 
@@ -25,24 +26,22 @@ def _make_tl_msg(msg_id, text="hi", msg_date: datetime | None = None):
     return msg
 
 
-async def _async_gen(items):
-    for item in items:
-        yield item
-
-
 def _make_client(tl_msgs, read_inbox_max_id: int = 0):
     client = MagicMock()
 
-    def _iter_messages_side_effect(*args, **kwargs):
+    async def _get_messages_side_effect(*args, **kwargs):
         limit = kwargs.get("limit", len(tl_msgs))
         add_offset = kwargs.get("add_offset", 0)
         offset_date = kwargs.get("offset_date")
         filtered = tl_msgs
         if offset_date is not None:
             filtered = [m for m in filtered if m.date < offset_date]
-        return _async_gen(filtered[add_offset : add_offset + limit])
+        page = filtered[add_offset : add_offset + limit]
+        result = TotalList(page)
+        result.total = len(filtered)
+        return result
 
-    client.iter_messages = MagicMock(side_effect=_iter_messages_side_effect)
+    client.get_messages = AsyncMock(side_effect=_get_messages_side_effect)
     client.get_entity = AsyncMock(side_effect=Exception("no entity"))
 
     dialog = MagicMock()
@@ -50,7 +49,6 @@ def _make_client(tl_msgs, read_inbox_max_id: int = 0):
     dialogs_result = MagicMock()
     dialogs_result.dialogs = [dialog]
 
-    # `await client(GetPeerDialogsRequest(...))` requires client() to return a coroutine.
     async def _call_side_effect(*_args, **_kwargs):
         return dialogs_result
 
@@ -59,16 +57,41 @@ def _make_client(tl_msgs, read_inbox_max_id: int = 0):
     return client
 
 
+def _make_sender_client(tl_msgs):
+    """Build a client mock for sender tests (custom get_entity)."""
+    client = MagicMock()
+
+    async def _get_messages_side_effect(*args, **kwargs):
+        result = TotalList(tl_msgs)
+        result.total = len(tl_msgs)
+        return result
+
+    client.get_messages = AsyncMock(side_effect=_get_messages_side_effect)
+    return client
+
+
+def _parse_messages(result: str) -> list[dict]:
+    """Extract the messages list from the YAML envelope."""
+    return yaml.safe_load(result)["messages"]
+
+
+def _parse_envelope(result: str) -> dict:
+    """Parse the full YAML envelope (remaining_pages + messages)."""
+    return yaml.safe_load(result)
+
+
 class TestGetMessages:
-    async def test_returns_yaml_list(self):
+    async def test_returns_yaml_envelope(self):
         from telegram_mcp_server.tools.messages import get_messages
 
         client = _make_client([_make_tl_msg(1, "hello")])
         result = await get_messages(client, chat_id=encode_chat(99))
-        parsed = yaml.safe_load(result)
-        assert isinstance(parsed, list)
-        assert parsed[0]["text"] == "hello"
-        assert parsed[0]["id"] == encode_message(99, 1)
+        envelope = _parse_envelope(result)
+        assert "remaining_pages" in envelope
+        assert "messages" in envelope
+        assert isinstance(envelope["messages"], list)
+        assert envelope["messages"][0]["text"] == "hello"
+        assert envelope["messages"][0]["id"] == encode_message(99, 1)
 
     async def test_pagination(self):
         from telegram_mcp_server.tools.messages import get_messages
@@ -76,18 +99,18 @@ class TestGetMessages:
         msgs = [_make_tl_msg(i, f"msg{i}") for i in range(1, 21)]
         client = _make_client(msgs)
         result = await get_messages(client, chat_id=encode_chat(1), page_idx=0)
-        assert len(yaml.safe_load(result)) == 16
+        assert len(_parse_messages(result)) == 16
 
         client = _make_client(msgs)
         result2 = await get_messages(client, chat_id=encode_chat(1), page_idx=1)
-        assert len(yaml.safe_load(result2)) == 4
+        assert len(_parse_messages(result2)) == 4
 
     async def test_topic_passes_reply_to(self):
         from telegram_mcp_server.tools.messages import get_messages
 
         client = _make_client([])
         await get_messages(client, chat_id=encode_topic(200, 5))
-        client.iter_messages.assert_called_once_with(
+        client.get_messages.assert_called_once_with(
             200, reply_to=5, limit=16, add_offset=0
         )
 
@@ -96,14 +119,14 @@ class TestGetMessages:
 
         client = _make_client([])
         await get_messages(client, chat_id=encode_chat(300))
-        client.iter_messages.assert_called_once_with(300, limit=16, add_offset=0)
+        client.get_messages.assert_called_once_with(300, limit=16, add_offset=0)
 
-    async def test_search_query_passed_to_iter_messages(self):
+    async def test_search_query_passed(self):
         from telegram_mcp_server.tools.messages import get_messages
 
         client = _make_client([])
         await get_messages(client, chat_id=encode_chat(300), search_query="hello")
-        client.iter_messages.assert_called_once_with(
+        client.get_messages.assert_called_once_with(
             300, search="hello", limit=16, add_offset=0
         )
 
@@ -112,27 +135,26 @@ class TestGetMessages:
 
         client = _make_client([])
         await get_messages(client, chat_id=encode_chat(300), search_query="")
-        client.iter_messages.assert_called_once_with(300, limit=16, add_offset=0)
+        client.get_messages.assert_called_once_with(300, limit=16, add_offset=0)
 
     async def test_none_chat_id_passes_none_peer(self):
         from telegram_mcp_server.tools.messages import get_messages
 
         client = _make_client([])
         await get_messages(client, chat_id=None, search_query="global")
-        client.iter_messages.assert_called_once_with(
+        client.get_messages.assert_called_once_with(
             None, search="global", limit=16, add_offset=0
         )
 
     async def test_page_ascending_order(self):
         from telegram_mcp_server.tools.messages import get_messages
 
-        # iter_messages returns newest-first (ids 5,4,3,2,1)
+        # get_messages returns newest-first (ids 5,4,3,2,1)
         msgs = [_make_tl_msg(i) for i in [5, 4, 3, 2, 1]]
         client = _make_client(msgs)
         result = await get_messages(client, chat_id=encode_chat(1), page_idx=0)
-        parsed = yaml.safe_load(result)
+        parsed = _parse_messages(result)
         ids = [p["id"] for p in parsed]
-        # Within the page, oldest (id=1) should come first
         assert ids == [encode_message(1, i) for i in [1, 2, 3, 4, 5]]
 
     async def test_sender_populated_in_group(self):
@@ -147,10 +169,8 @@ class TestGetMessages:
         tl_msg = _make_tl_msg(1, "hi")
         tl_msg.from_id = peer
 
-        # Chat entity for the group (to determine chat type).
         group_entity = MagicMock(spec=Chat)
 
-        # User entity for the sender.
         user_entity = MagicMock()
         user_entity.first_name = "Alice"
         user_entity.last_name = None
@@ -161,14 +181,11 @@ class TestGetMessages:
                 return group_entity
             return user_entity
 
-        client = MagicMock()
-        client.iter_messages = MagicMock(
-            side_effect=lambda *a, **kw: _async_gen([tl_msg])
-        )
+        client = _make_sender_client([tl_msg])
         client.get_entity = AsyncMock(side_effect=_get_entity)
 
         result = await get_messages(client, chat_id=encode_chat(1))
-        parsed = yaml.safe_load(result)
+        parsed = _parse_messages(result)
         assert "sender" in parsed[0]
         assert "@alice" in parsed[0]["sender"]
 
@@ -177,8 +194,7 @@ class TestGetMessages:
 
         client = _make_client([_make_tl_msg(1, "hello")])
         result = await get_messages(client, chat_id=encode_chat(1))
-        parsed = yaml.safe_load(result)
-        row = parsed[0]
+        row = _parse_messages(result)[0]
         assert "sender" not in row
         assert "sender_id" not in row
         assert "forwarded_from_id" not in row
@@ -208,14 +224,11 @@ class TestGetMessages:
                 return group_entity
             return user_entity
 
-        client = MagicMock()
-        client.iter_messages = MagicMock(
-            side_effect=lambda *a, **kw: _async_gen([tl_msg])
-        )
+        client = _make_sender_client([tl_msg])
         client.get_entity = AsyncMock(side_effect=_get_entity)
 
         result = await get_messages(client, chat_id=encode_chat(1))
-        parsed = yaml.safe_load(result)
+        parsed = _parse_messages(result)
         sender = parsed[0]["sender"]
         assert "@" not in sender
         assert "Bob" in sender
@@ -241,17 +254,14 @@ class TestGetMessages:
 
         dm_entity = MagicMock(spec=User)
 
-        client = MagicMock()
-        client.iter_messages = MagicMock(
-            side_effect=lambda *a, **kw: _async_gen([msg_from_them, msg_from_me])
-        )
+        client = _make_sender_client([msg_from_them, msg_from_me])
         client.get_entity = AsyncMock(return_value=dm_entity)
 
         orig = client_module._owner_id
         client_module._owner_id = my_id
         try:
             result = await get_messages(client, chat_id=encode_chat(999))
-            parsed = yaml.safe_load(result)
+            parsed = _parse_messages(result)
         finally:
             client_module._owner_id = orig
 
@@ -271,14 +281,11 @@ class TestGetMessages:
         channel_entity.megagroup = False
         channel_entity.gigagroup = False
 
-        client = MagicMock()
-        client.iter_messages = MagicMock(
-            side_effect=lambda *a, **kw: _async_gen([tl_msg])
-        )
+        client = _make_sender_client([tl_msg])
         client.get_entity = AsyncMock(return_value=channel_entity)
 
         result = await get_messages(client, chat_id=encode_chat(123))
-        parsed = yaml.safe_load(result)
+        parsed = _parse_messages(result)
         assert "sender" not in parsed[0]
 
     async def test_sender_post_author_in_channel(self):
@@ -294,20 +301,17 @@ class TestGetMessages:
         channel_entity.megagroup = False
         channel_entity.gigagroup = False
 
-        client = MagicMock()
-        client.iter_messages = MagicMock(
-            side_effect=lambda *a, **kw: _async_gen([tl_msg])
-        )
+        client = _make_sender_client([tl_msg])
         client.get_entity = AsyncMock(return_value=channel_entity)
 
         result = await get_messages(client, chat_id=encode_chat(123))
-        parsed = yaml.safe_load(result)
+        parsed = _parse_messages(result)
         assert parsed[0]["sender"] == "Admin Name"
 
     async def test_pages_descending_across_page_boundary(self):
         from telegram_mcp_server.tools.messages import get_messages
 
-        # iter_messages returns 20 msgs newest-first: ids 20..1
+        # get_messages returns 20 msgs newest-first: ids 20..1
         msgs = [_make_tl_msg(i) for i in range(20, 0, -1)]
         client = _make_client(msgs)
         result0 = await get_messages(client, chat_id=encode_chat(1), page_idx=0)
@@ -315,27 +319,23 @@ class TestGetMessages:
         client = _make_client(msgs)
         result1 = await get_messages(client, chat_id=encode_chat(1), page_idx=1)
 
-        page0_ids = [p["id"] for p in yaml.safe_load(result0)]
-        page1_ids = [p["id"] for p in yaml.safe_load(result1)]
+        page0_ids = [p["id"] for p in _parse_messages(result0)]
+        page1_ids = [p["id"] for p in _parse_messages(result1)]
 
-        # Page 0 contains ids 20..5 (newest 16), page 1 ids 4..1 — oldest in page 0 > newest in page 1
         page0_nums = {int(pid.split(":")[2]) for pid in page0_ids}
         page1_nums = {int(pid.split(":")[2]) for pid in page1_ids}
         assert min(page0_nums) > max(page1_nums)
 
-        # Within page 0: ascending (first element is oldest of that page)
         page0_nums_ordered = [int(pid.split(":")[2]) for pid in page0_ids]
         assert page0_nums_ordered == sorted(page0_nums_ordered)
 
     async def test_unread_field_set_for_unread_messages(self):
         from telegram_mcp_server.tools.messages import get_messages
 
-        # Messages 1–3; read up to id=2 → only id=3 is unread.
-        msgs = [_make_tl_msg(i) for i in [3, 2, 1]]  # newest-first
+        msgs = [_make_tl_msg(i) for i in [3, 2, 1]]
         client = _make_client(msgs, read_inbox_max_id=2)
         result = await get_messages(client, chat_id=encode_chat(1))
-        parsed = yaml.safe_load(result)
-        # page is oldest-first: [id=1, id=2, id=3]
+        parsed = _parse_messages(result)
         by_id = {int(r["id"].split(":")[2]): r for r in parsed}
         assert "unread" not in by_id[1]
         assert "unread" not in by_id[2]
@@ -347,7 +347,7 @@ class TestGetMessages:
         msgs = [_make_tl_msg(i) for i in [3, 2, 1]]
         client = _make_client(msgs, read_inbox_max_id=100)
         result = await get_messages(client, chat_id=encode_chat(1))
-        for row in yaml.safe_load(result):
+        for row in _parse_messages(result):
             assert "unread" not in row
 
     async def test_until_passes_offset_date(self):
@@ -355,7 +355,7 @@ class TestGetMessages:
 
         client = _make_client([])
         await get_messages(client, chat_id=encode_chat(1), until=date(2024, 6, 15))
-        call_kwargs = client.iter_messages.call_args.kwargs
+        call_kwargs = client.get_messages.call_args.kwargs
         assert "offset_date" in call_kwargs
         assert call_kwargs["offset_date"] == datetime(2024, 6, 15, tzinfo=UTC)
 
@@ -371,8 +371,7 @@ class TestGetMessages:
         result = await get_messages(
             client, chat_id=encode_chat(1), since=date(2024, 6, 10)
         )
-        parsed = yaml.safe_load(result)
-        texts = [m["text"] for m in parsed]
+        texts = [m["text"] for m in _parse_messages(result)]
         assert "old" not in texts
         assert "mid" in texts
         assert "new" in texts
@@ -392,11 +391,41 @@ class TestGetMessages:
             since=date(2024, 6, 5),
             until=date(2024, 6, 15),
         )
-        call_kwargs = client.iter_messages.call_args.kwargs
+        call_kwargs = client.get_messages.call_args.kwargs
         assert call_kwargs["offset_date"] == datetime(2024, 6, 15, tzinfo=UTC)
-        parsed = yaml.safe_load(result)
-        texts = [m["text"] for m in parsed]
+        texts = [m["text"] for m in _parse_messages(result)]
         assert texts == ["mid"]
+
+    async def test_remaining_pages_reported(self):
+        from telegram_mcp_server.tools.messages import get_messages
+
+        msgs = [_make_tl_msg(i) for i in range(20, 0, -1)]
+        client = _make_client(msgs)
+        envelope = _parse_envelope(
+            await get_messages(client, chat_id=encode_chat(1), page_idx=0)
+        )
+        # 20 total, page 0 fetches 16 → 4 remaining → 1 page
+        assert envelope["remaining_pages"] == 1
+
+    async def test_remaining_pages_zero_on_last_page(self):
+        from telegram_mcp_server.tools.messages import get_messages
+
+        msgs = [_make_tl_msg(i) for i in range(20, 0, -1)]
+        client = _make_client(msgs)
+        envelope = _parse_envelope(
+            await get_messages(client, chat_id=encode_chat(1), page_idx=1)
+        )
+        assert envelope["remaining_pages"] == 0
+
+    async def test_remaining_pages_zero_when_fits_in_one_page(self):
+        from telegram_mcp_server.tools.messages import get_messages
+
+        msgs = [_make_tl_msg(i) for i in [3, 2, 1]]
+        client = _make_client(msgs)
+        envelope = _parse_envelope(
+            await get_messages(client, chat_id=encode_chat(1), page_idx=0)
+        )
+        assert envelope["remaining_pages"] == 0
 
 
 class TestGetMessage:
