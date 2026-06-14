@@ -34,10 +34,17 @@ def _make_client(tl_msgs, read_inbox_max_id: int = 0):
         limit = kwargs.get("limit", len(tl_msgs))
         add_offset = kwargs.get("add_offset", 0)
         offset_date = kwargs.get("offset_date")
+        reverse = kwargs.get("reverse", False)
         filtered = tl_msgs
-        # With reverse=True, offset_date is the start point (messages >= offset_date).
         if offset_date is not None:
-            filtered = [m for m in filtered if m.date >= offset_date]
+            if reverse:
+                filtered = [m for m in filtered if m.date >= offset_date]
+            else:
+                filtered = [m for m in filtered if m.date < offset_date]
+        if limit == 0:
+            result = TotalList([])
+            result.total = len(filtered)
+            return result
         page = filtered[add_offset : add_offset + limit]
         result = TotalList(page)
         result.total = len(filtered)
@@ -435,8 +442,8 @@ class TestCountMessages:
 
         client = _make_client([_make_tl_msg(1)])
         await count_messages(client, chat_id=encode_chat(1))
-        call_kwargs = client.get_messages.call_args.kwargs
-        assert call_kwargs["limit"] == 0
+        for call in client.get_messages.call_args_list:
+            assert call.kwargs["limit"] == 0
 
 
 class TestGetMessage:

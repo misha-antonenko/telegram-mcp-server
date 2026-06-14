@@ -149,7 +149,6 @@ async def get_messages(
     peer_id, kwargs = await _build_chat_kwargs(client, chat_id)
 
     if since is not None:
-        # we want inclusivity
         kwargs["offset_date"] = _date_to_datetime(since) - timedelta(days=1)
 
     if search_query:
@@ -204,16 +203,25 @@ async def count_messages(
     """
     peer_id, kwargs = await _build_chat_kwargs(client, chat_id)
 
-    if since is not None:
-        # we want inclusivity
-        kwargs["offset_date"] = _date_to_datetime(since) - timedelta(days=1)
-
     if search_query:
         kwargs["search"] = search_query
 
-    tl_messages = await client.get_messages(peer_id, reverse=True, limit=0, **kwargs)
-    assert isinstance(tl_messages, telethon.hints.TotalList), type(tl_messages)
-    return tl_messages.total
+    async def _count(extra_kwargs: dict = {}) -> int:
+        merged = {**kwargs, **extra_kwargs}
+        tl = await client.get_messages(peer_id, limit=0, **merged)
+        assert isinstance(tl, telethon.hints.TotalList), type(tl)
+        return tl.total
+
+    if since is None:
+        return await _count()
+
+    # limit=0 ignores reverse=True, so offset_date always means "before".
+    # count_since = total - count_before_since.
+    total, before = await asyncio.gather(
+        _count(),
+        _count({"offset_date": _date_to_datetime(since)}),
+    )
+    return total - before
 
 
 async def search_messages(
