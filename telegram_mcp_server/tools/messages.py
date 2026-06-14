@@ -129,6 +129,7 @@ async def get_messages(
     chat_id: str,
     since: date | None = None,
     page_idx: int = 0,
+    search_query: str = "",
 ) -> str:
     """Return a YAML-serialised paginated list of messages from *chat_id*.
 
@@ -138,11 +139,15 @@ async def get_messages(
         chat_id: Opaque chat ID.
         since: Only include messages from this date onwards (inclusive).
         page_idx: Zero-based page index (16 messages per page).
+        search_query: Filter messages to those containing this text.
     """
     peer_id, kwargs = _build_chat_kwargs(chat_id)
 
     if since is not None:
         kwargs["offset_date"] = _date_to_datetime(since)
+
+    if search_query:
+        kwargs["search"] = search_query
 
     # Fetch read_inbox_max_id to mark unread messages.
     read_inbox_max_id: int = 0
@@ -182,17 +187,22 @@ async def count_messages(
     client: TelegramClient,
     chat_id: str,
     since: date | None = None,
+    search_query: str = "",
 ) -> int:
     """Return the number of messages matching the given filters.
 
     Args:
         chat_id: Opaque chat ID.
         since: Only count messages from this date onwards (inclusive).
+        search_query: Filter messages to those containing this text.
     """
     peer_id, kwargs = _build_chat_kwargs(chat_id)
 
     if since is not None:
         kwargs["offset_date"] = _date_to_datetime(since)
+
+    if search_query:
+        kwargs["search"] = search_query
 
     tl_messages = await client.get_messages(peer_id, reverse=True, limit=0, **kwargs)
     assert isinstance(tl_messages, telethon.hints.TotalList), type(tl_messages)
@@ -202,19 +212,17 @@ async def count_messages(
 async def search_messages(
     client: TelegramClient,
     query: str,
-    chat_id: str | None = None,
     page_idx: int = 0,
     since: date | None = None,
     until: date | None = None,
 ) -> str:
-    """Return a YAML-serialised paginated list of messages matching *query*.
+    """Search globally across all chats for messages matching *query*.
 
-    Results are ordered newest-first across pages; within each page messages
-    are ordered oldest-first (ascending by time).
+    Results are ordered newest-first. For searching within a specific chat,
+    use get_messages with search_query instead.
 
     Args:
         query: Non-empty search string.
-        chat_id: Opaque chat ID to restrict the search to; when None, searches globally.
         page_idx: Zero-based page index (16 messages per page).
         since: Only return messages from this date onwards (inclusive).
         until: Only return messages up to this date (exclusive).
@@ -223,45 +231,25 @@ async def search_messages(
 
     kwargs: dict = {"search": query}
 
-    if chat_id is not None:
-        peer_id_val, extra = _build_chat_kwargs(chat_id)
-        kwargs.update(extra)
-    else:
-        peer_id_val = None
-
     if until is not None:
         kwargs["offset_date"] = _date_to_datetime(until)
 
     since_dt = _date_to_datetime(since) if since is not None else None
 
-    # Fetch read_inbox_max_id for unread marking.
-    read_inbox_max_id: int = 0
-    if peer_id_val is not None:
-        try:
-            dialogs_result = await client(GetPeerDialogsRequest(peers=[peer_id_val]))
-            if dialogs_result.dialogs:
-                read_inbox_max_id = dialogs_result.dialogs[0].read_inbox_max_id
-        except Exception:
-            pass
-
     kwargs["limit"] = PAGE_SIZE
     kwargs["add_offset"] = page_idx * PAGE_SIZE
     # Global search cannot use reverse=True, so results are newest-first.
-    tl_messages_raw = await client.get_messages(peer_id_val, **kwargs)
+    tl_messages_raw = await client.get_messages(None, **kwargs)
     assert isinstance(tl_messages_raw, telethon.hints.TotalList), type(tl_messages_raw)
     total: int = tl_messages_raw.total
 
     if since_dt is not None:
         tl_messages_raw = [m for m in tl_messages_raw if m.date >= since_dt]
 
-    # Reverse to oldest-first within the page.
-    tl_messages = list(reversed(tl_messages_raw))
-    page = [Message.from_telethon(msg, peer_id_val or 0) for msg in tl_messages]
-    for msg, tl_msg in zip(page, tl_messages):
-        if tl_msg.id > read_inbox_max_id:
-            msg.unread = True
+    tl_messages = list(tl_messages_raw)
+    page = [Message.from_telethon(msg, 0) for msg in tl_messages]
 
-    chat_type = await _get_chat_type(client, peer_id_val)
+    chat_type = _ChatType.UNKNOWN
     await _populate_senders(client, page, tl_messages, chat_type)
 
     fetched_through = (page_idx + 1) * PAGE_SIZE

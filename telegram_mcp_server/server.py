@@ -123,19 +123,17 @@ async def search_chats(query: str, limit: int = 16) -> str:
 @mcp.tool()
 async def search_messages(
     query: str,
-    chat_id: str | None = None,
     page_idx: int = 0,
     since: date | None = None,
     until: date | None = None,
 ) -> str:
-    """Search for messages containing a query string, returning results as YAML.
+    """Search globally across all chats for messages containing a query string.
+
+    For searching within a specific chat, use get_messages with search_query.
 
     Args:
         query: Non-empty search string.
-        chat_id: Opaque chat ID obtained from get_chats or search_chats.
-                 When omitted, Telegram performs a global search across all chats.
-        page_idx: Zero-based page index (16 messages per page). The older the message,
-                  the higher the index.
+        page_idx: Zero-based page index (16 messages per page).
         since: Only return messages from this date onwards (inclusive). Format: YYYY-MM-DD.
         until: Only return messages up to this date (exclusive). Format: YYYY-MM-DD.
     """
@@ -143,7 +141,6 @@ async def search_messages(
     return await _search_messages(
         client,
         query=query,
-        chat_id=chat_id,
         page_idx=page_idx,
         since=since,
         until=until,
@@ -166,15 +163,17 @@ async def get_messages(
     chat_id: str,
     since: date | None = None,
     page_idx: int = 0,
+    search_query: str = "",
 ) -> str:
     """Return a paginated list of messages from a chat as YAML.
 
-    Messages are ordered oldest-first. Use search_messages for text search.
+    Messages are ordered oldest-first.
 
     Args:
         chat_id: Opaque chat ID obtained from get_chats or search_chats.
         since: Only include messages from this date onwards (inclusive). Format: YYYY-MM-DD.
         page_idx: Zero-based page index (16 messages per page).
+        search_query: Filter messages to those containing this text.
     """
     client = await get_client()
     return await _get_messages(
@@ -182,6 +181,7 @@ async def get_messages(
         chat_id=chat_id,
         since=since,
         page_idx=page_idx,
+        search_query=search_query,
     )
 
 
@@ -189,6 +189,7 @@ async def get_messages(
 async def count_messages(
     chat_id: str,
     since: date | None = None,
+    search_query: str = "",
 ) -> int:
     """Return the number of messages matching the given filters.
 
@@ -197,9 +198,12 @@ async def count_messages(
     Args:
         chat_id: Opaque chat ID obtained from get_chats or search_chats.
         since: Only count messages from this date onwards (inclusive). Format: YYYY-MM-DD.
+        search_query: Filter messages to those containing this text.
     """
     client = await get_client()
-    return await _count_messages(client, chat_id=chat_id, since=since)
+    return await _count_messages(
+        client, chat_id=chat_id, since=since, search_query=search_query
+    )
 
 
 @mcp.tool()

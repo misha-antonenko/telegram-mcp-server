@@ -126,6 +126,24 @@ class TestGetMessages:
             300, reverse=True, limit=16, add_offset=0
         )
 
+    async def test_search_query_passed(self):
+        from telegram_mcp_server.tools.messages import get_messages
+
+        client = _make_client([])
+        await get_messages(client, chat_id=encode_chat(300), search_query="hello")
+        client.get_messages.assert_called_once_with(
+            300, reverse=True, search="hello", limit=16, add_offset=0
+        )
+
+    async def test_empty_search_query_not_passed(self):
+        from telegram_mcp_server.tools.messages import get_messages
+
+        client = _make_client([])
+        await get_messages(client, chat_id=encode_chat(300), search_query="")
+        client.get_messages.assert_called_once_with(
+            300, reverse=True, limit=16, add_offset=0
+        )
+
     async def test_oldest_first_order(self):
         from telegram_mcp_server.tools.messages import get_messages
 
