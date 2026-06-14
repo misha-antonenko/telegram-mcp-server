@@ -186,7 +186,7 @@ async def get_messages(
     await _populate_senders(client, page, tl_messages, chat_type)
 
     fetched_through = (page_idx + 1) * PAGE_SIZE
-    remaining_pages = max(0, -(-max(0, total - fetched_through) // PAGE_SIZE))
+    remaining_pages = max(0, max(0, total - fetched_through) // PAGE_SIZE)
 
     return to_yaml(
         {
