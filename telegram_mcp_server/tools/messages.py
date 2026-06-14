@@ -164,7 +164,7 @@ async def get_messages(
         except Exception:
             pass  # leave read_inbox_max_id = 0; no unread marking
 
-    # Fetch the needed page (newest-first, then reverse for display).
+    # Fetch the needed page (oldest-first).
     kwargs["limit"] = PAGE_SIZE
     kwargs["add_offset"] = page_idx * PAGE_SIZE
     tl_messages = await client.get_messages(peer_id, reverse=True, **kwargs)
