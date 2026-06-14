@@ -103,35 +103,3 @@ class TestSearchMessages:
         await search_messages(client, query="x", until=date(2024, 6, 15))
         call_kwargs = client.get_messages.call_args.kwargs
         assert call_kwargs["offset_date"] == datetime(2024, 6, 15, tzinfo=UTC)
-
-    async def test_since_filters_messages(self):
-        from telegram_mcp_server.tools.messages import search_messages
-
-        msgs = [
-            _make_tl_msg(3, "new", datetime(2024, 6, 20, tzinfo=UTC)),
-            _make_tl_msg(2, "mid", datetime(2024, 6, 10, tzinfo=UTC)),
-            _make_tl_msg(1, "old", datetime(2024, 6, 1, tzinfo=UTC)),
-        ]
-        client = _make_client(msgs)
-        result = await search_messages(client, query="x", since=date(2024, 6, 10))
-        texts = [m["text"] for m in _parse_messages(result)]
-        assert "old" not in texts
-        assert "mid" in texts
-        assert "new" in texts
-
-    async def test_since_and_until_combined(self):
-        from telegram_mcp_server.tools.messages import search_messages
-
-        msgs = [
-            _make_tl_msg(3, "new", datetime(2024, 6, 20, tzinfo=UTC)),
-            _make_tl_msg(2, "mid", datetime(2024, 6, 10, tzinfo=UTC)),
-            _make_tl_msg(1, "old", datetime(2024, 6, 1, tzinfo=UTC)),
-        ]
-        client = _make_client(msgs)
-        result = await search_messages(
-            client, query="x", since=date(2024, 6, 5), until=date(2024, 6, 15)
-        )
-        call_kwargs = client.get_messages.call_args.kwargs
-        assert call_kwargs["offset_date"] == datetime(2024, 6, 15, tzinfo=UTC)
-        texts = [m["text"] for m in _parse_messages(result)]
-        assert texts == ["mid"]

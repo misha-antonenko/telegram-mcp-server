@@ -213,7 +213,6 @@ async def search_messages(
     client: TelegramClient,
     query: str,
     page_idx: int = 0,
-    since: date | None = None,
     until: date | None = None,
 ) -> str:
     """Search globally across all chats for messages matching *query*.
@@ -224,7 +223,6 @@ async def search_messages(
     Args:
         query: Non-empty search string.
         page_idx: Zero-based page index (16 messages per page).
-        since: Only return messages from this date onwards (inclusive).
         until: Only return messages up to this date (exclusive).
     """
     assert query, "query must be non-empty"
@@ -234,17 +232,12 @@ async def search_messages(
     if until is not None:
         kwargs["offset_date"] = _date_to_datetime(until)
 
-    since_dt = _date_to_datetime(since) if since is not None else None
-
     kwargs["limit"] = PAGE_SIZE
     kwargs["add_offset"] = page_idx * PAGE_SIZE
     # Global search cannot use reverse=True, so results are newest-first.
     tl_messages_raw = await client.get_messages(None, **kwargs)
     assert isinstance(tl_messages_raw, telethon.hints.TotalList), type(tl_messages_raw)
     total: int = tl_messages_raw.total
-
-    if since_dt is not None:
-        tl_messages_raw = [m for m in tl_messages_raw if m.date >= since_dt]
 
     tl_messages = list(tl_messages_raw)
     page = [Message.from_telethon(msg, 0) for msg in tl_messages]

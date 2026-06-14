@@ -124,7 +124,6 @@ async def search_chats(query: str, limit: int = 16) -> str:
 async def search_messages(
     query: str,
     page_idx: int = 0,
-    since: date | None = None,
     until: date | None = None,
 ) -> str:
     """Search globally across all chats for messages containing a query string.
@@ -134,7 +133,6 @@ async def search_messages(
     Args:
         query: Non-empty search string.
         page_idx: Zero-based page index (16 messages per page).
-        since: Only return messages from this date onwards (inclusive). Format: YYYY-MM-DD.
         until: Only return messages up to this date (exclusive). Format: YYYY-MM-DD.
     """
     client = await get_client()
@@ -142,7 +140,6 @@ async def search_messages(
         client,
         query=query,
         page_idx=page_idx,
-        since=since,
         until=until,
     )
 
