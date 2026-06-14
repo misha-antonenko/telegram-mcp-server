@@ -126,9 +126,9 @@ async def search_messages(
     page_idx: int = 0,
     until: date | None = None,
 ) -> str:
-    """Search globally across all chats for messages containing a query string.
+    """Search across all chats for messages containing a query string.
 
-    For searching within a specific chat, use get_messages with search_query.
+    Messages are ordered newest-first.
 
     Args:
         query: Non-empty search string.
@@ -160,7 +160,7 @@ async def get_messages(
     chat_id: str,
     since: date | None = None,
     page_idx: int = 0,
-    search_query: str = "",
+    query: str = "",
 ) -> str:
     """Return a paginated list of messages from a chat as YAML.
 
@@ -170,7 +170,7 @@ async def get_messages(
         chat_id: Opaque chat ID obtained from get_chats or search_chats.
         since: Only include messages from this date onwards (inclusive). Format: YYYY-MM-DD.
         page_idx: Zero-based page index (16 messages per page).
-        search_query: Filter messages to those containing this text.
+        query: Filter messages to those containing this text.
     """
     client = await get_client()
     return await _get_messages(
@@ -178,7 +178,7 @@ async def get_messages(
         chat_id=chat_id,
         since=since,
         page_idx=page_idx,
-        search_query=search_query,
+        search_query=query,
     )
 
 
@@ -186,20 +186,15 @@ async def get_messages(
 async def count_messages(
     chat_id: str,
     since: date | None = None,
-    search_query: str = "",
+    query: str = "",
 ) -> int:
     """Return the number of messages matching the given filters.
 
     The meaning of the arguments is the same as in get_messages.
-
-    Args:
-        chat_id: Opaque chat ID obtained from get_chats or search_chats.
-        since: Only count messages from this date onwards (inclusive). Format: YYYY-MM-DD.
-        search_query: Filter messages to those containing this text.
     """
     client = await get_client()
     return await _count_messages(
-        client, chat_id=chat_id, since=since, search_query=search_query
+        client, chat_id=chat_id, since=since, search_query=query
     )
 
 
