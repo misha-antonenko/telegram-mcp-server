@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from pydantic import Field
+from telethon import utils as tl_utils
 
 from telegram_mcp_server.ids import encode_chat, encode_topic
 from telegram_mcp_server.models.base import ToolModel
@@ -78,8 +79,13 @@ def _msg_sender_id(msg: object | None) -> int | None:
 
 
 def _peer_id(entity: object) -> int:
-    """Return the numeric peer ID for any Telethon entity."""
-    return getattr(entity, "id", 0)
+    """Return the marked numeric peer ID for any Telethon entity.
+
+    Uses ``telethon.utils.get_peer_id`` so that channels get the ``-100``
+    prefix and basic groups get a negative sign, making the ID unambiguous
+    when passed back to Telethon.
+    """
+    return tl_utils.get_peer_id(entity)
 
 
 def _full_name(entity: object) -> str:

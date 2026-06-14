@@ -3,6 +3,7 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import yaml
+from telethon.tl.types import Channel, User
 
 from telegram_mcp_server.ids import encode_chat, encode_topic
 
@@ -14,10 +15,18 @@ def _patch_settings():
 
 
 def _make_dialog(
-    peer_id, title, unread_count, message_text, is_forum=False, sender_id=None
+    peer_id,
+    title,
+    unread_count,
+    message_text,
+    is_forum=False,
+    sender_id=None,
+    entity_cls=User,
 ):
-    entity = MagicMock()
-    entity.id = peer_id
+    if entity_cls is User:
+        entity = User(id=peer_id, is_self=False, access_hash=0, first_name=title)
+    else:
+        entity = Channel(id=peer_id, title=title, access_hash=0, date=None, photo=None)
     entity.title = title
     entity.username = None
     entity.forum = is_forum
@@ -138,8 +147,6 @@ class TestGetChats:
 
     async def test_custom_folder_no_limit(self):
         """Custom folders must scan all dialogs (no limit passed)."""
-        from telethon.tl.types import User
-
         from telegram_mcp_server.tools.chats import get_chats
 
         peer_in = MagicMock()
@@ -161,11 +168,8 @@ class TestGetChats:
         filters_result.filters = [custom]
 
         dialog = _make_dialog(10, "Bob", unread_count=0, message_text="hi")
-        dialog.entity = MagicMock(spec=User)
-        dialog.entity.id = 10
         dialog.entity.bot = False
         dialog.entity.contact = False
-        dialog.entity.forum = False
 
         client = AsyncMock()
         client.iter_dialogs = MagicMock(return_value=_async_gen([dialog]))
@@ -176,8 +180,6 @@ class TestGetChats:
         client.iter_dialogs.assert_called_once_with()
 
     async def test_folder_custom_filters_by_include_peers(self):
-        from telethon.tl.types import User
-
         from telegram_mcp_server.tools.chats import get_chats
 
         peer_in = MagicMock()
@@ -200,19 +202,13 @@ class TestGetChats:
 
         # dialog_in: entity id=10 matches include_peers.
         dialog_in = _make_dialog(10, "Included", unread_count=0, message_text="hi")
-        dialog_in.entity = MagicMock(spec=User)
-        dialog_in.entity.id = 10
         dialog_in.entity.bot = False
         dialog_in.entity.contact = False
-        dialog_in.entity.forum = False
 
         # dialog_out: not in any explicit or category list.
         dialog_out = _make_dialog(20, "Excluded", unread_count=0, message_text="bye")
-        dialog_out.entity = MagicMock(spec=User)
-        dialog_out.entity.id = 20
         dialog_out.entity.bot = False
         dialog_out.entity.contact = False
-        dialog_out.entity.forum = False
 
         client = AsyncMock()
         client.iter_dialogs = MagicMock(
@@ -226,8 +222,6 @@ class TestGetChats:
         assert chats[0]["id"] == encode_chat(10)
 
     async def test_folder_custom_filters_by_category_flags(self):
-        from telethon.tl.types import Channel, User
-
         from telegram_mcp_server.tools.chats import get_chats
 
         custom = _make_filter(5, "Channels")
@@ -244,20 +238,16 @@ class TestGetChats:
         filters_result.filters = [custom]
 
         # A broadcast channel — should be included.
-        dialog_channel = _make_dialog(1, "Chan", unread_count=0, message_text="x")
-        dialog_channel.entity = MagicMock(spec=Channel)
-        dialog_channel.entity.id = 1
+        dialog_channel = _make_dialog(
+            1, "Chan", unread_count=0, message_text="x", entity_cls=Channel
+        )
         dialog_channel.entity.megagroup = False
         dialog_channel.entity.gigagroup = False
-        dialog_channel.entity.forum = False
 
         # A plain user — should not be included.
         dialog_user = _make_dialog(2, "User", unread_count=0, message_text="y")
-        dialog_user.entity = MagicMock(spec=User)
-        dialog_user.entity.id = 2
         dialog_user.entity.bot = False
         dialog_user.entity.contact = False
-        dialog_user.entity.forum = False
 
         client = AsyncMock()
         client.iter_dialogs = MagicMock(
@@ -268,11 +258,9 @@ class TestGetChats:
         result = await get_chats(client, folder="Channels")
         chats = yaml.safe_load(result)
         assert len(chats) == 1
-        assert chats[0]["id"] == encode_chat(1)
+        assert chats[0]["id"] == encode_chat(-1000000000001)
 
     async def test_folder_custom_exclude_peers_override(self):
-        from telethon.tl.types import User
-
         from telegram_mcp_server.tools.chats import get_chats
 
         exclude_peer = MagicMock()
@@ -295,11 +283,8 @@ class TestGetChats:
 
         # A contact that is also excluded — exclude wins.
         dialog = _make_dialog(10, "Bob", unread_count=0, message_text="hi")
-        dialog.entity = MagicMock(spec=User)
-        dialog.entity.id = 10
         dialog.entity.bot = False
         dialog.entity.contact = True
-        dialog.entity.forum = False
 
         client = AsyncMock()
         client.iter_dialogs = MagicMock(return_value=_async_gen([dialog]))
@@ -356,7 +341,12 @@ class TestGetChats:
 
         # Forum dialog; topic1 date=8 (newer than chat), topic2 date=3 (older).
         forum_dialog = _make_dialog(
-            500, "Forum", unread_count=0, message_text="", is_forum=True
+            500,
+            "Forum",
+            unread_count=0,
+            message_text="",
+            is_forum=True,
+            entity_cls=Channel,
         )
 
         topic1 = MagicMock()
@@ -399,16 +389,21 @@ class TestGetChats:
         chats = yaml.safe_load(result)
         assert len(chats) == 3
         # Expected order: topic1(8) > chat(5) > topic2(3)
-        assert chats[0]["id"] == encode_topic(500, 1)
+        assert chats[0]["id"] == encode_topic(-1000000000500, 1)
         assert chats[1]["id"] == encode_chat(1)
-        assert chats[2]["id"] == encode_topic(500, 2)
+        assert chats[2]["id"] == encode_topic(-1000000000500, 2)
 
     async def test_forum_topics_expanded(self):
         from telegram_mcp_server.tools.chats import get_chats
 
         client = MagicMock()
         forum_dialog = _make_dialog(
-            500, "Forum", unread_count=0, message_text="", is_forum=True
+            500,
+            "Forum",
+            unread_count=0,
+            message_text="",
+            is_forum=True,
+            entity_cls=Channel,
         )
 
         topic1 = MagicMock()
@@ -444,8 +439,8 @@ class TestGetChats:
         # Both topics returned — no unread filter anymore.
         assert len(chats) == 2
         ids = {c["id"] for c in chats}
-        assert encode_topic(500, 1) in ids
-        assert encode_topic(500, 2) in ids
+        assert encode_topic(-1000000000500, 1) in ids
+        assert encode_topic(-1000000000500, 2) in ids
         # Topic names must be prefixed with the forum name.
         names = {c["name"] for c in chats}
         assert any(n.startswith("Forum / ") for n in names)

@@ -2,13 +2,14 @@
 
 from unittest.mock import MagicMock
 
+from telethon.tl.types import User
+
 from telegram_mcp_server.ids import encode_chat, encode_topic
 from telegram_mcp_server.models.chat import Chat
 
 
 def _make_dialog(peer_id=1, title="Chat", unread_count=0, message_text=""):
-    entity = MagicMock()
-    entity.id = peer_id
+    entity = User(id=peer_id, is_self=False, access_hash=0, first_name=title)
     entity.title = title
     entity.username = None
     entity.forum = False

@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import yaml
+from telethon.tl.types import User
 
 from telegram_mcp_server.ids import encode_chat
 
@@ -13,8 +14,7 @@ def _patch_settings():
 
 
 def _make_dialog(peer_id, title, unread_count=0):
-    entity = MagicMock()
-    entity.id = peer_id
+    entity = User(id=peer_id, is_self=False, access_hash=0, first_name=title)
     entity.title = title
     entity.username = None
     entity.forum = False

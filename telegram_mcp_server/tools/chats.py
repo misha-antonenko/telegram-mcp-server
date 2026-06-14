@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from telethon import TelegramClient
+from telethon import utils as tl_utils
 from telethon.tl.functions.messages import (
     GetDialogFiltersRequest,
     GetForumTopicsRequest,
@@ -224,7 +225,7 @@ async def get_chats(
             for topic in topics_result.topics:
                 entries.append(
                     ChatModel.from_topic(
-                        supergroup_id=entity.id,
+                        supergroup_id=tl_utils.get_peer_id(entity),
                         forum_name=forum_name,
                         topic=topic,
                         has_unread=topic.unread_count > 0,
