@@ -129,6 +129,34 @@ async def _build_chat_kwargs(client: TelegramClient, chat_id: str) -> tuple[int,
     return ref.peer_id, kwargs
 
 
+async def _count_filtered(
+    client: TelegramClient,
+    peer_id: int,
+    since: date | None,
+    extra_kwargs: dict,
+) -> int:
+    """Return the number of messages matching the filters.
+
+    With ``since`` set, two ``limit=0`` queries run in parallel because
+    Telethon's ``limit=0`` path ignores ``reverse=True``, making
+    ``offset_date`` always mean "before this date".
+    """
+
+    async def _raw_count(kw: dict) -> int:
+        tl = await client.get_messages(peer_id, limit=0, **kw)
+        assert isinstance(tl, telethon.hints.TotalList), type(tl)
+        return tl.total
+
+    if since is None:
+        return await _raw_count(extra_kwargs)
+
+    total, before = await asyncio.gather(
+        _raw_count(extra_kwargs),
+        _raw_count({**extra_kwargs, "offset_date": _date_to_datetime(since)}),
+    )
+    return total - before
+
+
 async def get_messages(
     client: TelegramClient,
     chat_id: str,
@@ -154,20 +182,28 @@ async def get_messages(
     if search_query:
         kwargs["search"] = search_query
 
-    # Fetch read_inbox_max_id to mark unread messages.
+    # Fetch read_inbox_max_id and the accurate filtered total in parallel.
     read_inbox_max_id: int = 0
-    try:
-        dialogs_result = await client(GetPeerDialogsRequest(peers=[peer_id]))
-        if dialogs_result.dialogs:
-            read_inbox_max_id = dialogs_result.dialogs[0].read_inbox_max_id
-    except Exception:
-        pass
+
+    async def _fetch_read_inbox() -> None:
+        nonlocal read_inbox_max_id
+        try:
+            dialogs_result = await client(GetPeerDialogsRequest(peers=[peer_id]))
+            if dialogs_result.dialogs:
+                read_inbox_max_id = dialogs_result.dialogs[0].read_inbox_max_id
+        except Exception:
+            pass
+
+    count_kwargs = {"search": search_query} if search_query else {}
+    total, _ = await asyncio.gather(
+        _count_filtered(client, peer_id, since, count_kwargs),
+        _fetch_read_inbox(),
+    )
 
     kwargs["limit"] = PAGE_SIZE
     kwargs["add_offset"] = page_idx * PAGE_SIZE
     tl_messages = await client.get_messages(peer_id, reverse=True, **kwargs)
     assert isinstance(tl_messages, telethon.hints.TotalList), type(tl_messages)
-    total: int = tl_messages.total
 
     page = [Message.from_telethon(msg, peer_id) for msg in tl_messages]
     for msg, tl_msg in zip(page, tl_messages):
@@ -202,26 +238,9 @@ async def count_messages(
         search_query: Filter messages to those containing this text.
     """
     peer_id, kwargs = await _build_chat_kwargs(client, chat_id)
-
     if search_query:
         kwargs["search"] = search_query
-
-    async def _count(extra_kwargs: dict = {}) -> int:
-        merged = {**kwargs, **extra_kwargs}
-        tl = await client.get_messages(peer_id, limit=0, **merged)
-        assert isinstance(tl, telethon.hints.TotalList), type(tl)
-        return tl.total
-
-    if since is None:
-        return await _count()
-
-    # limit=0 ignores reverse=True, so offset_date always means "before".
-    # count_since = total - count_before_since.
-    total, before = await asyncio.gather(
-        _count(),
-        _count({"offset_date": _date_to_datetime(since)}),
-    )
-    return total - before
+    return await _count_filtered(client, peer_id, since, kwargs)
 
 
 async def search_messages(

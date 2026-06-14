@@ -122,7 +122,7 @@ class TestGetMessages:
 
         client = _make_client([])
         await get_messages(client, chat_id=encode_topic(200, 5))
-        client.get_messages.assert_called_once_with(
+        client.get_messages.assert_any_call(
             200, reverse=True, reply_to=5, limit=16, add_offset=0
         )
 
@@ -131,16 +131,14 @@ class TestGetMessages:
 
         client = _make_client([])
         await get_messages(client, chat_id=encode_chat(300))
-        client.get_messages.assert_called_once_with(
-            300, reverse=True, limit=16, add_offset=0
-        )
+        client.get_messages.assert_any_call(300, reverse=True, limit=16, add_offset=0)
 
     async def test_search_query_passed(self):
         from telegram_mcp_server.tools.messages import get_messages
 
         client = _make_client([])
         await get_messages(client, chat_id=encode_chat(300), search_query="hello")
-        client.get_messages.assert_called_once_with(
+        client.get_messages.assert_any_call(
             300, reverse=True, search="hello", limit=16, add_offset=0
         )
 
@@ -149,9 +147,7 @@ class TestGetMessages:
 
         client = _make_client([])
         await get_messages(client, chat_id=encode_chat(300), search_query="")
-        client.get_messages.assert_called_once_with(
-            300, reverse=True, limit=16, add_offset=0
-        )
+        client.get_messages.assert_any_call(300, reverse=True, limit=16, add_offset=0)
 
     async def test_oldest_first_order(self):
         from telegram_mcp_server.tools.messages import get_messages
@@ -412,6 +408,28 @@ class TestGetMessages:
             await get_messages(client, chat_id=encode_chat(1), page_idx=0)
         )
         assert envelope["remaining_pages"] == 0
+
+    async def test_remaining_pages_with_since(self):
+        from telegram_mcp_server.tools.messages import get_messages
+
+        msgs = [
+            _make_tl_msg(i, msg_date=datetime(2024, 6, d, tzinfo=UTC))
+            for i, d in enumerate([1, 5, 10, 15, 20, 25], start=1)
+        ]
+        client = _make_client(msgs)
+        envelope = _parse_envelope(
+            await get_messages(client, chat_id=encode_chat(1), since=date(2024, 6, 10))
+        )
+        # 3 messages on or after June 10 (ids 3,4,5,6 → dates 10,15,20,25)
+        # Wait: since=June 10, offset_date=June 9 (minus 1 day for inclusivity).
+        # reverse=True mock filters date >= offset_date → dates 10,15,20,25 = 4 msgs.
+        # _count_filtered uses limit=0 without reverse:
+        #   total (no filter) = 6
+        #   before_since (date < June 10) = 2 (dates 1, 5)
+        #   filtered = 6 - 2 = 4
+        # All 4 fit in one page (PAGE_SIZE=16), so remaining_pages = 0.
+        assert envelope["remaining_pages"] == 0
+        assert len(envelope["messages"]) == 4
 
 
 class TestCountMessages:
