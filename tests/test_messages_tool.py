@@ -44,7 +44,10 @@ def _make_client(tl_msgs, read_inbox_max_id: int = 0):
             result = TotalList([])
             result.total = len(filtered)
             return result
-        page = filtered[add_offset : add_offset + limit]
+        # Mimic Telethon's reverse pagination: negative add_offset
+        # means forward page offset when min_id anchors the query.
+        start = -add_offset if min_id and add_offset < 0 else add_offset
+        page = filtered[start : start + limit]
         result = TotalList(page)
         result.total = len(filtered)
         return result

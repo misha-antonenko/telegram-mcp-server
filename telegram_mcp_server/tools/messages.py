@@ -173,20 +173,17 @@ async def get_messages(
         pass
 
     if min_id:
-        # Telethon's reverse + add_offset paginates backward from
-        # the anchor, so add_offset can't be used for forward pages.
-        # Fetch all messages up to the desired page and slice.
         kwargs["min_id"] = min_id
-        kwargs["limit"] = (page_idx + 1) * PAGE_SIZE
-        all_tl = await client.get_messages(peer_id, reverse=True, **kwargs)
-        assert isinstance(all_tl, telethon.hints.TotalList), type(all_tl)
-        tl_messages = telethon.helpers.TotalList(list(all_tl)[page_idx * PAGE_SIZE :])
-        tl_messages.total = all_tl.total
-    else:
-        kwargs["limit"] = PAGE_SIZE
-        kwargs["add_offset"] = page_idx * PAGE_SIZE
-        tl_messages = await client.get_messages(peer_id, reverse=True, **kwargs)
-        assert isinstance(tl_messages, telethon.hints.TotalList), type(tl_messages)
+
+    kwargs["limit"] = PAGE_SIZE
+    # With reverse=True, Telethon sets offset_id from min_id and
+    # adjusts add_offset relative to that anchor.  When anchored at
+    # offset_id=1 (no min_id), positive add_offset pages forward.
+    # When anchored at min_id+1, the direction flips — negate to
+    # keep pages going forward in time.
+    kwargs["add_offset"] = -page_idx * PAGE_SIZE if min_id else page_idx * PAGE_SIZE
+    tl_messages = await client.get_messages(peer_id, reverse=True, **kwargs)
+    assert isinstance(tl_messages, telethon.hints.TotalList), type(tl_messages)
 
     page = [Message.from_telethon(msg, peer_id) for msg in tl_messages]
     for msg, tl_msg in zip(page, tl_messages):
