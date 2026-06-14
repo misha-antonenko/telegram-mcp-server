@@ -100,7 +100,8 @@ async def get_chats(
 
     Args:
         folder: Folder name. Always call get_folders first to obtain the list.
-        page_idx: Zero-based page index (16 chats per page).
+        page_idx: Zero-based page index (16 chats per page). The earlier the chat was last updated,
+                  the higher the index.
     """
     client = await get_client()
     return await _get_chats(client, page_idx=page_idx, folder=folder)
@@ -132,7 +133,8 @@ async def search_messages(
         query: Non-empty search string.
         chat_id: Opaque chat ID obtained from get_chats or search_chats.
                  When omitted, Telegram performs a global search across all chats.
-        page_idx: Zero-based page index (16 messages per page).
+        page_idx: Zero-based page index (16 messages per page). The older the message,
+                  the higher the index.
         since: Only return messages from this date onwards (inclusive). Format: YYYY-MM-DD.
         until: Only return messages up to this date (exclusive). Format: YYYY-MM-DD.
     """
@@ -171,7 +173,8 @@ async def get_messages(
     Args:
         chat_id: Opaque chat ID obtained from get_chats.
                  When omitted, Telegram performs a global search (requires search_query).
-        page_idx: Zero-based page index (16 messages per page).
+        page_idx: Zero-based page index (16 messages per page). The older the message,
+                  the higher the index.
         search_query: Optional search string; filters messages to those containing it.
         since: Only return messages from this date onwards (inclusive). Format: YYYY-MM-DD.
         until: Only return messages up to this date (exclusive). Format: YYYY-MM-DD.
