@@ -46,7 +46,7 @@ def _make_client(tl_msgs):
 
 
 def _parse_messages(result: str) -> list[dict]:
-    return yaml.safe_load(result)["messages"]
+    return yaml.safe_load(result)
 
 
 class TestSearchMessages:
@@ -59,7 +59,7 @@ class TestSearchMessages:
             None, search="hello", limit=16, add_offset=0
         )
 
-    async def test_returns_yaml_envelope(self):
+    async def test_returns_yaml_list(self):
         from telegram_mcp_server.tools.messages import search_messages
 
         client = _make_client([_make_tl_msg(1, "match")])

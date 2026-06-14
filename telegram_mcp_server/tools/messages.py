@@ -129,34 +129,6 @@ async def _build_chat_kwargs(client: TelegramClient, chat_id: str) -> tuple[int,
     return ref.peer_id, kwargs
 
 
-async def _count_filtered(
-    client: TelegramClient,
-    peer_id: int,
-    since: date | None,
-    extra_kwargs: dict,
-) -> int:
-    """Return the number of messages matching the filters.
-
-    With ``since`` set, two ``limit=0`` queries run in parallel because
-    Telethon's ``limit=0`` path ignores ``reverse=True``, making
-    ``offset_date`` always mean "before this date".
-    """
-
-    async def _raw_count(kw: dict) -> int:
-        tl = await client.get_messages(peer_id, limit=0, **kw)
-        assert isinstance(tl, telethon.hints.TotalList), type(tl)
-        return tl.total
-
-    if since is None:
-        return await _raw_count(extra_kwargs)
-
-    total, before = await asyncio.gather(
-        _raw_count(extra_kwargs),
-        _raw_count({**extra_kwargs, "offset_date": _date_to_datetime(since)}),
-    )
-    return total - before
-
-
 async def get_messages(
     client: TelegramClient,
     chat_id: str,
@@ -182,23 +154,13 @@ async def get_messages(
     if search_query:
         kwargs["search"] = search_query
 
-    # Fetch read_inbox_max_id and the accurate filtered total in parallel.
     read_inbox_max_id: int = 0
-
-    async def _fetch_read_inbox() -> None:
-        nonlocal read_inbox_max_id
-        try:
-            dialogs_result = await client(GetPeerDialogsRequest(peers=[peer_id]))
-            if dialogs_result.dialogs:
-                read_inbox_max_id = dialogs_result.dialogs[0].read_inbox_max_id
-        except Exception:
-            pass
-
-    count_kwargs = {"search": search_query} if search_query else {}
-    total, _ = await asyncio.gather(
-        _count_filtered(client, peer_id, since, count_kwargs),
-        _fetch_read_inbox(),
-    )
+    try:
+        dialogs_result = await client(GetPeerDialogsRequest(peers=[peer_id]))
+        if dialogs_result.dialogs:
+            read_inbox_max_id = dialogs_result.dialogs[0].read_inbox_max_id
+    except Exception:
+        pass
 
     kwargs["limit"] = PAGE_SIZE
     kwargs["add_offset"] = page_idx * PAGE_SIZE
@@ -213,34 +175,26 @@ async def get_messages(
     chat_type = await _get_chat_type(client, peer_id)
     await _populate_senders(client, page, list(tl_messages), chat_type)
 
-    fetched_through = (page_idx + 1) * PAGE_SIZE
-    remaining_pages = max(0, -(-max(0, total - fetched_through) // PAGE_SIZE))
-
-    return to_yaml(
-        {
-            "remaining_pages": remaining_pages,
-            "messages": [m.model_dump() for m in page],
-        }
-    )
+    return to_yaml([m.model_dump() for m in page])
 
 
 async def count_messages(
     client: TelegramClient,
     chat_id: str,
-    since: date | None = None,
     search_query: str = "",
 ) -> int:
-    """Return the number of messages matching the given filters.
+    """Return the total number of messages in a chat (optionally filtered by search query).
 
     Args:
         chat_id: Opaque chat ID.
-        since: Only count messages from this date onwards (inclusive).
         search_query: Filter messages to those containing this text.
     """
     peer_id, kwargs = await _build_chat_kwargs(client, chat_id)
     if search_query:
         kwargs["search"] = search_query
-    return await _count_filtered(client, peer_id, since, kwargs)
+    tl = await client.get_messages(peer_id, limit=0, **kwargs)
+    assert isinstance(tl, telethon.hints.TotalList), type(tl)
+    return tl.total
 
 
 async def search_messages(
@@ -272,7 +226,6 @@ async def search_messages(
     # Global search cannot use reverse=True, so results are newest-first.
     tl_messages_raw = await client.get_messages(None, **kwargs)
     assert isinstance(tl_messages_raw, telethon.hints.TotalList), type(tl_messages_raw)
-    total: int = tl_messages_raw.total
 
     tl_messages = list(tl_messages_raw)
     page = [Message.from_telethon(msg, 0) for msg in tl_messages]
@@ -280,15 +233,7 @@ async def search_messages(
     chat_type = _ChatType.UNKNOWN
     await _populate_senders(client, page, tl_messages, chat_type)
 
-    fetched_through = (page_idx + 1) * PAGE_SIZE
-    remaining_pages = max(0, -(-max(0, total - fetched_through) // PAGE_SIZE))
-
-    return to_yaml(
-        {
-            "remaining_pages": remaining_pages,
-            "messages": [m.model_dump() for m in page],
-        }
-    )
+    return to_yaml([m.model_dump() for m in page])
 
 
 async def get_message(client: TelegramClient, message_id: str) -> str:

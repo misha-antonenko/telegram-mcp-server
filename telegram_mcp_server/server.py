@@ -185,17 +185,14 @@ async def get_messages(
 @mcp.tool()
 async def count_messages(
     chat_id: str,
-    since: date | None = None,
     query: str = "",
 ) -> int:
-    """Return the number of messages matching the given filters.
+    """Return the total number of messages in a chat (optionally filtered by search query).
 
     The meaning of the arguments is the same as in get_messages.
     """
     client = await get_client()
-    return await _count_messages(
-        client, chat_id=chat_id, since=since, search_query=query
-    )
+    return await _count_messages(client, chat_id=chat_id, search_query=query)
 
 
 @mcp.tool()

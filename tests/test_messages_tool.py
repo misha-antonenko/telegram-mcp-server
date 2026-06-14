@@ -82,27 +82,20 @@ def _make_sender_client(tl_msgs):
 
 
 def _parse_messages(result: str) -> list[dict]:
-    """Extract the messages list from the YAML envelope."""
-    return yaml.safe_load(result)["messages"]
-
-
-def _parse_envelope(result: str) -> dict:
-    """Parse the full YAML envelope (remaining_pages + messages)."""
+    """Parse the YAML message list."""
     return yaml.safe_load(result)
 
 
 class TestGetMessages:
-    async def test_returns_yaml_envelope(self):
+    async def test_returns_yaml_list(self):
         from telegram_mcp_server.tools.messages import get_messages
 
         client = _make_client([_make_tl_msg(1, "hello")])
         result = await get_messages(client, chat_id=encode_chat(99))
-        envelope = _parse_envelope(result)
-        assert "remaining_pages" in envelope
-        assert "messages" in envelope
-        assert isinstance(envelope["messages"], list)
-        assert envelope["messages"][0]["text"] == "hello"
-        assert envelope["messages"][0]["id"] == encode_message(99, 1)
+        parsed = _parse_messages(result)
+        assert isinstance(parsed, list)
+        assert parsed[0]["text"] == "hello"
+        assert parsed[0]["id"] == encode_message(99, 1)
 
     async def test_pagination(self):
         from telegram_mcp_server.tools.messages import get_messages
@@ -122,7 +115,7 @@ class TestGetMessages:
 
         client = _make_client([])
         await get_messages(client, chat_id=encode_topic(200, 5))
-        client.get_messages.assert_any_call(
+        client.get_messages.assert_called_once_with(
             200, reverse=True, reply_to=5, limit=16, add_offset=0
         )
 
@@ -131,14 +124,16 @@ class TestGetMessages:
 
         client = _make_client([])
         await get_messages(client, chat_id=encode_chat(300))
-        client.get_messages.assert_any_call(300, reverse=True, limit=16, add_offset=0)
+        client.get_messages.assert_called_once_with(
+            300, reverse=True, limit=16, add_offset=0
+        )
 
     async def test_search_query_passed(self):
         from telegram_mcp_server.tools.messages import get_messages
 
         client = _make_client([])
         await get_messages(client, chat_id=encode_chat(300), search_query="hello")
-        client.get_messages.assert_any_call(
+        client.get_messages.assert_called_once_with(
             300, reverse=True, search="hello", limit=16, add_offset=0
         )
 
@@ -147,7 +142,9 @@ class TestGetMessages:
 
         client = _make_client([])
         await get_messages(client, chat_id=encode_chat(300), search_query="")
-        client.get_messages.assert_any_call(300, reverse=True, limit=16, add_offset=0)
+        client.get_messages.assert_called_once_with(
+            300, reverse=True, limit=16, add_offset=0
+        )
 
     async def test_oldest_first_order(self):
         from telegram_mcp_server.tools.messages import get_messages
@@ -379,58 +376,6 @@ class TestGetMessages:
         assert "mid" in texts
         assert "new" in texts
 
-    async def test_remaining_pages_reported(self):
-        from telegram_mcp_server.tools.messages import get_messages
-
-        msgs = [_make_tl_msg(i) for i in range(1, 21)]
-        client = _make_client(msgs)
-        envelope = _parse_envelope(
-            await get_messages(client, chat_id=encode_chat(1), page_idx=0)
-        )
-        assert envelope["remaining_pages"] == 1
-
-    async def test_remaining_pages_zero_on_last_page(self):
-        from telegram_mcp_server.tools.messages import get_messages
-
-        msgs = [_make_tl_msg(i) for i in range(1, 21)]
-        client = _make_client(msgs)
-        envelope = _parse_envelope(
-            await get_messages(client, chat_id=encode_chat(1), page_idx=1)
-        )
-        assert envelope["remaining_pages"] == 0
-
-    async def test_remaining_pages_zero_when_fits_in_one_page(self):
-        from telegram_mcp_server.tools.messages import get_messages
-
-        msgs = [_make_tl_msg(i) for i in [1, 2, 3]]
-        client = _make_client(msgs)
-        envelope = _parse_envelope(
-            await get_messages(client, chat_id=encode_chat(1), page_idx=0)
-        )
-        assert envelope["remaining_pages"] == 0
-
-    async def test_remaining_pages_with_since(self):
-        from telegram_mcp_server.tools.messages import get_messages
-
-        msgs = [
-            _make_tl_msg(i, msg_date=datetime(2024, 6, d, tzinfo=UTC))
-            for i, d in enumerate([1, 5, 10, 15, 20, 25], start=1)
-        ]
-        client = _make_client(msgs)
-        envelope = _parse_envelope(
-            await get_messages(client, chat_id=encode_chat(1), since=date(2024, 6, 10))
-        )
-        # 3 messages on or after June 10 (ids 3,4,5,6 → dates 10,15,20,25)
-        # Wait: since=June 10, offset_date=June 9 (minus 1 day for inclusivity).
-        # reverse=True mock filters date >= offset_date → dates 10,15,20,25 = 4 msgs.
-        # _count_filtered uses limit=0 without reverse:
-        #   total (no filter) = 6
-        #   before_since (date < June 10) = 2 (dates 1, 5)
-        #   filtered = 6 - 2 = 4
-        # All 4 fit in one page (PAGE_SIZE=16), so remaining_pages = 0.
-        assert envelope["remaining_pages"] == 0
-        assert len(envelope["messages"]) == 4
-
 
 class TestCountMessages:
     async def test_returns_total(self):
@@ -441,27 +386,19 @@ class TestCountMessages:
         total = await count_messages(client, chat_id=encode_chat(1))
         assert total == 20
 
-    async def test_with_since(self):
+    async def test_with_search_query(self):
         from telegram_mcp_server.tools.messages import count_messages
 
-        msgs = [
-            _make_tl_msg(1, "old", datetime(2024, 6, 1, tzinfo=UTC)),
-            _make_tl_msg(2, "mid", datetime(2024, 6, 10, tzinfo=UTC)),
-            _make_tl_msg(3, "new", datetime(2024, 6, 20, tzinfo=UTC)),
-        ]
-        client = _make_client(msgs)
-        total = await count_messages(
-            client, chat_id=encode_chat(1), since=date(2024, 6, 10)
-        )
-        assert total == 2
+        client = _make_client([_make_tl_msg(1)])
+        await count_messages(client, chat_id=encode_chat(1), search_query="hello")
+        client.get_messages.assert_called_once_with(1, limit=0, search="hello")
 
     async def test_passes_limit_zero(self):
         from telegram_mcp_server.tools.messages import count_messages
 
         client = _make_client([_make_tl_msg(1)])
         await count_messages(client, chat_id=encode_chat(1))
-        for call in client.get_messages.call_args_list:
-            assert call.kwargs["limit"] == 0
+        client.get_messages.assert_called_once_with(1, limit=0)
 
 
 class TestGetMessage:
