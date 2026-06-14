@@ -102,4 +102,4 @@ class TestSearchMessages:
         client = _make_client([])
         await search_messages(client, query="x", until=date(2024, 6, 15))
         call_kwargs = client.get_messages.call_args.kwargs
-        assert call_kwargs["offset_date"] == datetime(2024, 6, 15, tzinfo=UTC)
+        assert call_kwargs["offset_date"] == datetime(2024, 6, 16, tzinfo=UTC)

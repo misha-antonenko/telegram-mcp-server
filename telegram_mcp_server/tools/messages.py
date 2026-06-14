@@ -115,9 +115,14 @@ def _date_to_datetime(d: date) -> datetime:
     return datetime(d.year, d.month, d.day, tzinfo=timezone.utc)
 
 
-def _build_chat_kwargs(chat_id: str) -> tuple[int, dict]:
-    """Parse *chat_id* and return (peer_id, extra kwargs for get_messages)."""
+async def _build_chat_kwargs(client: TelegramClient, chat_id: str) -> tuple[int, dict]:
+    """Parse *chat_id*, prime entity cache, return (peer_id, extra kwargs).
+
+    Resolving the entity via *client* ensures that Telethon's cache has
+    the access hash needed for channels and supergroups.
+    """
     ref: ChatRef = decode_chat(chat_id)
+    await client.get_input_entity(ref.peer_id)
     kwargs: dict = {}
     if ref.is_topic:
         kwargs["reply_to"] = ref.topic_id
@@ -141,7 +146,7 @@ async def get_messages(
         page_idx: Zero-based page index (16 messages per page).
         search_query: Filter messages to those containing this text.
     """
-    peer_id, kwargs = _build_chat_kwargs(chat_id)
+    peer_id, kwargs = await _build_chat_kwargs(client, chat_id)
 
     if since is not None:
         # we want inclusivity
@@ -197,7 +202,7 @@ async def count_messages(
         since: Only count messages from this date onwards (inclusive).
         search_query: Filter messages to those containing this text.
     """
-    peer_id, kwargs = _build_chat_kwargs(chat_id)
+    peer_id, kwargs = await _build_chat_kwargs(client, chat_id)
 
     if since is not None:
         # we want inclusivity
