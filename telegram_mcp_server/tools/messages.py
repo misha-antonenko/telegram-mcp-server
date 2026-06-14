@@ -167,16 +167,14 @@ async def get_messages(
     # Fetch the needed page (newest-first, then reverse for display).
     kwargs["limit"] = PAGE_SIZE
     kwargs["add_offset"] = page_idx * PAGE_SIZE
-    tl_messages_raw = await client.get_messages(peer_id, **kwargs)
-    assert isinstance(tl_messages_raw, telethon.hints.TotalList), type(tl_messages_raw)
-    total: int = tl_messages_raw.total
+    tl_messages = await client.get_messages(peer_id, reverse=True, **kwargs)
+    assert isinstance(tl_messages, telethon.hints.TotalList), type(tl_messages)
+    total: int = tl_messages.total
 
     # Filter by since date if provided (Telethon has no native min_date).
     if since_dt is not None:
-        tl_messages_raw = [m for m in tl_messages_raw if m.date >= since_dt]
+        tl_messages = [m for m in tl_messages if m.date >= since_dt]
 
-    # Reverse to oldest-first for display; keep parallel lists in sync.
-    tl_messages = list(reversed(tl_messages_raw))
     page = [Message.from_telethon(msg, peer_id or 0) for msg in tl_messages]
     for msg, tl_msg in zip(page, tl_messages):
         if tl_msg.id > read_inbox_max_id:
