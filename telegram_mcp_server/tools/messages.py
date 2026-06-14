@@ -148,11 +148,21 @@ async def get_messages(
     """
     peer_id, kwargs = await _build_chat_kwargs(client, chat_id)
 
-    if since is not None:
-        kwargs["offset_date"] = _date_to_datetime(since)
-
     if search_query:
         kwargs["search"] = search_query
+
+    min_id: int = 0
+    if since is not None:
+        # Convert the date to a min_id boundary.  offset_date returns
+        # messages *before* the date (newest-first), so limit=1 gives
+        # the last message before `since`.  Using its id as min_id
+        # restricts results to messages after the boundary.
+        filter_kwargs = {k: v for k, v in kwargs.items() if k in ("reply_to", "search")}
+        boundary = await client.get_messages(
+            peer_id, limit=1, offset_date=_date_to_datetime(since), **filter_kwargs
+        )
+        if boundary:
+            min_id = boundary[0].id
 
     read_inbox_max_id: int = 0
     try:
@@ -162,10 +172,21 @@ async def get_messages(
     except Exception:
         pass
 
-    kwargs["limit"] = PAGE_SIZE
-    kwargs["add_offset"] = page_idx * PAGE_SIZE
-    tl_messages = await client.get_messages(peer_id, reverse=True, **kwargs)
-    assert isinstance(tl_messages, telethon.hints.TotalList), type(tl_messages)
+    if min_id:
+        # Telethon's reverse + add_offset paginates backward from
+        # the anchor, so add_offset can't be used for forward pages.
+        # Fetch all messages up to the desired page and slice.
+        kwargs["min_id"] = min_id
+        kwargs["limit"] = (page_idx + 1) * PAGE_SIZE
+        all_tl = await client.get_messages(peer_id, reverse=True, **kwargs)
+        assert isinstance(all_tl, telethon.hints.TotalList), type(all_tl)
+        tl_messages = telethon.helpers.TotalList(list(all_tl)[page_idx * PAGE_SIZE :])
+        tl_messages.total = all_tl.total
+    else:
+        kwargs["limit"] = PAGE_SIZE
+        kwargs["add_offset"] = page_idx * PAGE_SIZE
+        tl_messages = await client.get_messages(peer_id, reverse=True, **kwargs)
+        assert isinstance(tl_messages, telethon.hints.TotalList), type(tl_messages)
 
     page = [Message.from_telethon(msg, peer_id) for msg in tl_messages]
     for msg, tl_msg in zip(page, tl_messages):

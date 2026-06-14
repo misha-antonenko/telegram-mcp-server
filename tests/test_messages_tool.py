@@ -34,13 +34,12 @@ def _make_client(tl_msgs, read_inbox_max_id: int = 0):
         limit = kwargs.get("limit", len(tl_msgs))
         add_offset = kwargs.get("add_offset", 0)
         offset_date = kwargs.get("offset_date")
-        reverse = kwargs.get("reverse", False)
+        min_id = kwargs.get("min_id", 0)
         filtered = tl_msgs
         if offset_date is not None:
-            if reverse:
-                filtered = [m for m in filtered if m.date >= offset_date]
-            else:
-                filtered = [m for m in filtered if m.date < offset_date]
+            filtered = [m for m in filtered if m.date < offset_date]
+        if min_id:
+            filtered = [m for m in filtered if m.id > min_id]
         if limit == 0:
             result = TotalList([])
             result.total = len(filtered)
@@ -350,18 +349,9 @@ class TestGetMessages:
         for row in _parse_messages(result):
             assert "unread" not in row
 
-    async def test_since_passes_offset_date(self):
+    async def test_since_uses_min_id(self):
         from telegram_mcp_server.tools.messages import get_messages
 
-        client = _make_client([])
-        await get_messages(client, chat_id=encode_chat(1), since=date(2024, 6, 15))
-        call_kwargs = client.get_messages.call_args.kwargs
-        assert call_kwargs["offset_date"] == datetime(2024, 6, 15, tzinfo=UTC)
-
-    async def test_since_filters_server_side(self):
-        from telegram_mcp_server.tools.messages import get_messages
-
-        # Oldest-first.
         msgs = [
             _make_tl_msg(1, "old", datetime(2024, 6, 1, tzinfo=UTC)),
             _make_tl_msg(2, "mid", datetime(2024, 6, 10, tzinfo=UTC)),
@@ -371,10 +361,35 @@ class TestGetMessages:
         result = await get_messages(
             client, chat_id=encode_chat(1), since=date(2024, 6, 10)
         )
+        # Boundary query finds msg 1 (last before June 10), so min_id=1.
+        # Main query returns messages with id > 1: mid and new.
         texts = [m["text"] for m in _parse_messages(result)]
-        assert "old" not in texts
-        assert "mid" in texts
-        assert "new" in texts
+        assert texts == ["mid", "new"]
+
+    async def test_since_pagination_goes_forward(self):
+        from telegram_mcp_server.tools.messages import get_messages
+
+        msgs = [
+            _make_tl_msg(i, f"msg{i}", datetime(2024, 6, d, tzinfo=UTC))
+            for i, d in zip(range(1, 22), [1] + list(range(2, 22)))
+        ]
+        client = _make_client(msgs)
+        p0 = _parse_messages(
+            await get_messages(
+                client, chat_id=encode_chat(1), since=date(2024, 6, 2), page_idx=0
+            )
+        )
+        client = _make_client(msgs)
+        p1 = _parse_messages(
+            await get_messages(
+                client, chat_id=encode_chat(1), since=date(2024, 6, 2), page_idx=1
+            )
+        )
+        p0_ids = [int(m["id"].split(":")[2]) for m in p0]
+        p1_ids = [int(m["id"].split(":")[2]) for m in p1]
+        assert len(p0) == 16
+        assert len(p1) == 4
+        assert max(p0_ids) < min(p1_ids)
 
 
 class TestCountMessages:
