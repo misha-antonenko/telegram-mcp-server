@@ -1,5 +1,3 @@
-"""Tests for the opaque ID scheme."""
-
 import pytest
 
 from telegram_mcp_server.ids import (

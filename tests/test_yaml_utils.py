@@ -1,5 +1,3 @@
-"""Tests for YAML serialization."""
-
 import yaml
 
 from telegram_mcp_server.yaml_utils import to_yaml
@@ -17,7 +15,6 @@ def test_simple_string():
 def test_multiline_string_uses_block_style():
     text = "line one\nline two"
     dumped = to_yaml({"key": text})
-    # literal block style: | or |- (no trailing newline)
     assert "|\n" in dumped or "|-\n" in dumped
     assert _roundtrip({"key": text}) == {"key": text}
 
@@ -49,18 +46,15 @@ def test_boolean_values():
 
 
 def test_special_yaml_chars_in_string():
-    # Strings containing : and # should still round-trip correctly
     text = "key: value # comment"
     result = _roundtrip({"msg": text})
     assert result == {"msg": text}
 
 
 def test_multiline_with_trailing_spaces_uses_block_style():
-    # Trailing whitespace before newlines should not cause quoted style
     text = "line one \nline two  \nline three"
     dumped = to_yaml({"key": text})
     assert "|\n" in dumped or "|-\n" in dumped
-    assert "\\n" not in dumped  # no escaped newlines
-    # Trailing spaces are stripped
+    assert "\\n" not in dumped
     result = _roundtrip({"key": text})
     assert result == {"key": "line one\nline two\nline three"}

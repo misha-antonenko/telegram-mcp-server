@@ -1,5 +1,3 @@
-"""Tests for the Chat model."""
-
 from unittest.mock import MagicMock
 
 from telethon.tl.types import User

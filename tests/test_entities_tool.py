@@ -1,5 +1,3 @@
-"""Tests for the get_entity tool."""
-
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest

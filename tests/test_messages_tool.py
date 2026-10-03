@@ -1,5 +1,3 @@
-"""Tests for the get_messages, count_messages, and get_message tools."""
-
 from datetime import UTC, date, datetime
 from unittest.mock import AsyncMock, MagicMock
 
@@ -26,16 +24,15 @@ def _make_tl_msg(msg_id, text="hi", msg_date: datetime | None = None):
     return msg
 
 
-def _make_client(tl_msgs, read_inbox_max_id: int = 0):
-    """Build a mock client for get_messages (reverse=True, oldest-first)."""
+def _make_client(oldest_first_tl_msgs, read_inbox_max_id: int = 0):
     client = MagicMock()
 
     async def _get_messages_side_effect(*args, **kwargs):
-        limit = kwargs.get("limit", len(tl_msgs))
+        limit = kwargs.get("limit", len(oldest_first_tl_msgs))
         add_offset = kwargs.get("add_offset", 0)
         offset_date = kwargs.get("offset_date")
         min_id = kwargs.get("min_id", 0)
-        filtered = tl_msgs
+        filtered = oldest_first_tl_msgs
         if offset_date is not None:
             filtered = [m for m in filtered if m.date < offset_date]
         if min_id:
@@ -44,9 +41,8 @@ def _make_client(tl_msgs, read_inbox_max_id: int = 0):
             result = TotalList([])
             result.total = len(filtered)
             return result
-        # Mimic Telethon's reverse pagination: negative add_offset
-        # means forward page offset when min_id anchors the query.
-        start = -add_offset if min_id and add_offset < 0 else add_offset
+        is_reverse_offset_anchored_at_min_id = min_id and add_offset < 0
+        start = -add_offset if is_reverse_offset_anchored_at_min_id else add_offset
         page = filtered[start : start + limit]
         result = TotalList(page)
         result.total = len(filtered)
@@ -70,7 +66,6 @@ def _make_client(tl_msgs, read_inbox_max_id: int = 0):
 
 
 def _make_sender_client(tl_msgs):
-    """Build a client mock for sender tests (custom get_entity)."""
     client = MagicMock()
 
     async def _get_messages_side_effect(*args, **kwargs):
@@ -84,7 +79,6 @@ def _make_sender_client(tl_msgs):
 
 
 def _parse_messages(result: str) -> list[dict]:
-    """Parse the YAML message list."""
     return yaml.safe_load(result)
 
 
@@ -102,7 +96,6 @@ class TestGetMessages:
     async def test_pagination(self):
         from telegram_mcp_server.tools.messages import get_messages
 
-        # Oldest-first: ids 1..20
         msgs = [_make_tl_msg(i, f"msg{i}") for i in range(1, 21)]
         client = _make_client(msgs)
         result = await get_messages(client, chat_id=encode_chat(1), page_idx=0)
@@ -151,7 +144,6 @@ class TestGetMessages:
     async def test_oldest_first_order(self):
         from telegram_mcp_server.tools.messages import get_messages
 
-        # Already oldest-first (as reverse=True would return).
         msgs = [_make_tl_msg(i) for i in [1, 2, 3, 4, 5]]
         client = _make_client(msgs)
         result = await get_messages(client, chat_id=encode_chat(1), page_idx=0)
@@ -160,7 +152,6 @@ class TestGetMessages:
         assert ids == [1, 2, 3, 4, 5]
 
     async def test_sender_populated_in_group(self):
-        """In groups, sender is the formatted name."""
         from telethon.tl.types import Chat, PeerUser
 
         from telegram_mcp_server.tools.messages import get_messages
@@ -203,7 +194,6 @@ class TestGetMessages:
         assert "reply_to_message_id" not in row
 
     async def test_sender_no_username_in_group(self):
-        """In groups, sender name works without username."""
         from telethon.tl.types import Chat, PeerUser
 
         from telegram_mcp_server.tools.messages import get_messages
@@ -236,7 +226,6 @@ class TestGetMessages:
         assert "Bob" in sender
 
     async def test_sender_me_them_in_dm(self):
-        """In DMs, sender is 'me' or 'them'."""
         from telethon.tl.types import PeerUser, User
 
         import telegram_mcp_server.client as client_module
@@ -256,7 +245,6 @@ class TestGetMessages:
 
         dm_entity = MagicMock(spec=User)
 
-        # Oldest-first: me first, then them.
         client = _make_sender_client([msg_from_me, msg_from_them])
         client.get_entity = AsyncMock(return_value=dm_entity)
 
@@ -272,7 +260,6 @@ class TestGetMessages:
         assert parsed[1]["sender"] == "them"
 
     async def test_sender_omitted_in_channel(self):
-        """In channels without post_author, sender is omitted."""
         from telethon.tl.types import Channel
 
         from telegram_mcp_server.tools.messages import get_messages
@@ -292,7 +279,6 @@ class TestGetMessages:
         assert "sender" not in parsed[0]
 
     async def test_sender_post_author_in_channel(self):
-        """In channels with signed posts, sender is the post_author."""
         from telethon.tl.types import Channel
 
         from telegram_mcp_server.tools.messages import get_messages
@@ -314,7 +300,6 @@ class TestGetMessages:
     async def test_pages_ascending_across_page_boundary(self):
         from telegram_mcp_server.tools.messages import get_messages
 
-        # Oldest-first: ids 1..20
         msgs = [_make_tl_msg(i) for i in range(1, 21)]
         client = _make_client(msgs)
         result0 = await get_messages(client, chat_id=encode_chat(1), page_idx=0)
@@ -325,7 +310,6 @@ class TestGetMessages:
         page0_nums = [int(p["id"].split(":")[2]) for p in _parse_messages(result0)]
         page1_nums = [int(p["id"].split(":")[2]) for p in _parse_messages(result1)]
 
-        # Page 0 = ids 1..16 (oldest), page 1 = ids 17..20.
         assert max(page0_nums) < min(page1_nums)
         assert page0_nums == sorted(page0_nums)
         assert page1_nums == sorted(page1_nums)
@@ -333,7 +317,6 @@ class TestGetMessages:
     async def test_unread_field_set_for_unread_messages(self):
         from telegram_mcp_server.tools.messages import get_messages
 
-        # Oldest-first.
         msgs = [_make_tl_msg(i) for i in [1, 2, 3]]
         client = _make_client(msgs, read_inbox_max_id=2)
         result = await get_messages(client, chat_id=encode_chat(1))
@@ -364,8 +347,6 @@ class TestGetMessages:
         result = await get_messages(
             client, chat_id=encode_chat(1), since=date(2024, 6, 10)
         )
-        # Boundary query finds msg 1 (last before June 10), so min_id=1.
-        # Main query returns messages with id > 1: mid and new.
         texts = [m["text"] for m in _parse_messages(result)]
         assert texts == ["mid", "new"]
 
@@ -445,7 +426,6 @@ class TestGetMessage:
         client.get_messages.assert_called_once_with(1234, ids=42)
 
     async def test_sender_populated_in_group(self):
-        """get_message in a group shows full sender name."""
         from telethon.tl.types import Chat, PeerUser
 
         from telegram_mcp_server.tools.messages import get_message

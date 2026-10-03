@@ -1,5 +1,3 @@
-"""Tests for the search_chats tool."""
-
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -119,5 +117,4 @@ class TestSearchChats:
         client = MagicMock()
         client.iter_dialogs = MagicMock(return_value=_async_gen([]))
         await search_chats(client, query="x")
-        # search across all dialogs, no archived filter
         client.iter_dialogs.assert_called_once_with()

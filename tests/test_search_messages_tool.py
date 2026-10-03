@@ -1,5 +1,3 @@
-"""Tests for the search_messages tool (global search only)."""
-
 from datetime import UTC, date, datetime
 from unittest.mock import AsyncMock, MagicMock
 
@@ -24,7 +22,6 @@ def _make_tl_msg(msg_id, text="hi", msg_date: datetime | None = None):
 
 
 def _make_client(tl_msgs):
-    """Build a mock client for search_messages (newest-first, no reverse)."""
     client = MagicMock()
 
     async def _get_messages_side_effect(*args, **kwargs):

@@ -1,5 +1,3 @@
-"""Tests for the Message model."""
-
 from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
@@ -8,7 +6,6 @@ from telegram_mcp_server.models.message import Message
 
 
 def _make_msg(**kwargs):
-    """Build a minimal mock Telethon Message."""
     msg = MagicMock()
     msg.id = kwargs.get("id", 1)
     msg.date = kwargs.get("date", datetime(2024, 1, 1, tzinfo=UTC))
@@ -34,7 +31,7 @@ class TestMessageFromTelethon:
         dt = datetime(2024, 6, 15, 12, 30, 0, tzinfo=UTC)
         msg = _make_msg(date=dt)
         result = Message.from_telethon(msg, peer_id=1)
-        assert result.timestamp == "2024-06-15 12:30"  # UTC
+        assert result.timestamp == "2024-06-15 12:30"
 
     def test_photo_caption_and_image_field(self):
         from telethon.tl.types import MessageMediaPhoto
@@ -132,13 +129,12 @@ class TestMessageFromTelethon:
         result = Message.from_telethon(msg, peer_id=1)
         assert result.forwarded_from_id == 123
 
-    def test_webpage_media_shows_text(self):
+    def test_webpage_media_keeps_text_instead_of_media_id(self):
         from telethon.tl.types import MessageMediaWebPage
 
         webpage = MagicMock(spec=MessageMediaWebPage)
         msg = _make_msg(id=10, media=webpage, message="Check this link")
         result = Message.from_telethon(msg, peer_id=1)
-        # Webpage media should NOT replace text with a media ID
         assert result.text == "Check this link"
 
     def test_model_dump_omits_none_fields(self):

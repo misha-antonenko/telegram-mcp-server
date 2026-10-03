@@ -1,5 +1,3 @@
-"""Tests for the Entity models."""
-
 from unittest.mock import MagicMock
 
 from telegram_mcp_server.ids import encode_user_photo

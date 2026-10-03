@@ -1,5 +1,3 @@
-"""Tests for the send_message and forward_message tools."""
-
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -10,8 +8,6 @@ from telegram_mcp_server.ids import encode_chat, encode_message
 
 
 class TestToTelethonEntities:
-    """Unit tests for _to_telethon_entities() covering every supported entity type."""
-
     def _convert(self, entities):
         from telegram_mcp_server.tools.send import _to_telethon_entities
 
@@ -133,8 +129,6 @@ class TestToTelethonEntities:
 
 
 class TestParseMarkdown:
-    """Integration tests for _parse_markdown() using real telegramify_markdown.convert() output."""
-
     def _parse(self, text):
         from telegram_mcp_server.tools.send import _parse_markdown
 
@@ -198,7 +192,6 @@ class TestParseMarkdown:
         assert any(isinstance(e, tl.MessageEntityCode) for e in entities)
 
     async def test_no_backslash_escaping_in_plain_text(self):
-        """Regression: plain text with periods/punctuation must not gain backslash escapes."""
         from telegram_mcp_server.tools.send import send_message
 
         sent = MagicMock()
