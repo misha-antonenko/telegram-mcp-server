@@ -27,6 +27,15 @@ async def get_image(client: TelegramClient, media_id: str) -> EncodedImage:
     return await asyncio.to_thread(normalize_image, data, get_settings().image_max_side_px)
 
 
+async def get_text_file(client: TelegramClient, media_id: str) -> str:
+    max_size_bytes = get_settings().text_file_max_bytes
+    data = await _download_message_media(client, media_id, MediaCategory.FILE, max_size_bytes)
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise ValueError(f"{media_id!r} is not a UTF-8 text file: {error}") from error
+
+
 def _cache_path(media_id: str, category: MediaCategory) -> Path:
     digest = hashlib.sha256(f"{category}:{media_id}".encode()).hexdigest()
     return get_settings().image_cache_dir / f"{digest}.bin"
@@ -55,7 +64,10 @@ async def _download_cached(cache_path: Path, download: Callable[[], Awaitable[by
 
 
 async def _download_message_media(
-    client: TelegramClient, media_id: str, expected_category: MediaCategory
+    client: TelegramClient,
+    media_id: str,
+    expected_category: MediaCategory,
+    max_size_bytes: int | None = None,
 ) -> bytes:
     ref = decode_media(media_id)
     if ref.kind != MediaKind.MESSAGE_ATTACHMENT:
@@ -68,6 +80,9 @@ async def _download_message_media(
         category = classify_media(tl_message.media)
         if category != expected_category:
             raise ValueError(f"{media_id!r} is {category or 'no media'}, not {expected_category}")
+        size = tl_message.file.size
+        if max_size_bytes is not None and size > max_size_bytes:
+            raise ValueError(f"{media_id!r} has {size} bytes, above the limit of {max_size_bytes}")
         return await client.download_media(tl_message, file=bytes)
 
     return await _download_cached(_cache_path(media_id, expected_category), download)

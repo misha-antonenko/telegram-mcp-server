@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     session_string: str
     image_cache_dir: Path = Path(".image_cache")
     image_max_side_px: int = 1568
+    text_file_max_bytes: int = 256 * 1024
     attachments_dir: Path = Path(".attachments")
     transcription_timeout_seconds: float = 60
     transcription_poll_interval_seconds: float = 1

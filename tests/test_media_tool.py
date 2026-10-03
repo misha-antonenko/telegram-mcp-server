@@ -3,11 +3,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from PIL import Image as PillowImage
-from telethon.tl.types import Document, DocumentAttributeFilename, MessageMediaDocument
+from telethon.tl.patched import Message
+from telethon.tl.types import Document, DocumentAttributeFilename, MessageMediaDocument, PeerUser
 
 from telegram_mcp_server.ids import encode_message_media, encode_user_photo
 from telegram_mcp_server.tools.images import normalize_image
-from telegram_mcp_server.tools.media import get_image
+from telegram_mcp_server.tools.media import get_image, get_text_file
 
 MAX_SIDE_PX = 64
 
@@ -18,25 +19,38 @@ def _encode_image(image_format: str, size: tuple[int, int], mode: str = "RGB") -
     return buffer.getvalue()
 
 
-def _document_message(mime_type: str) -> MagicMock:
+def _document_message(mime_type: str, size: int = 10) -> Message:
     document = Document(
         id=1,
         access_hash=0,
         file_reference=b"",
         date=None,
         mime_type=mime_type,
-        size=10,
+        size=size,
         dc_id=1,
         attributes=[DocumentAttributeFilename("x")],
     )
-    tl_message = MagicMock()
-    tl_message.media = MessageMediaDocument(document=document)
-    return tl_message
+    return Message(
+        id=5,
+        peer_id=PeerUser(user_id=100),
+        date=None,
+        message="",
+        media=MessageMediaDocument(document=document),
+    )
+
+
+def _client_serving(tl_message: Message, data: bytes = b"") -> MagicMock:
+    client = MagicMock()
+    client.get_messages = AsyncMock(return_value=tl_message)
+    client.download_media = AsyncMock(return_value=data)
+    return client
 
 
 @pytest.fixture(autouse=True)
 def settings(tmp_path):
-    settings = MagicMock(image_cache_dir=tmp_path, image_max_side_px=MAX_SIDE_PX)
+    settings = MagicMock(
+        image_cache_dir=tmp_path, image_max_side_px=MAX_SIDE_PX, text_file_max_bytes=16
+    )
     with patch("telegram_mcp_server.tools.media.get_settings", return_value=settings):
         yield settings
 
@@ -64,10 +78,7 @@ def test_normalize_image(
 
 
 async def test_image_sent_as_file_is_downloaded_once():
-    data = _encode_image("PNG", (8, 8))
-    client = MagicMock()
-    client.get_messages = AsyncMock(return_value=_document_message("image/png"))
-    client.download_media = AsyncMock(return_value=data)
+    client = _client_serving(_document_message("image/png"), _encode_image("PNG", (8, 8)))
     media_id = encode_message_media(100, 5)
 
     first = await get_image(client, media_id)
@@ -79,13 +90,31 @@ async def test_image_sent_as_file_is_downloaded_once():
 
 
 async def test_non_image_rejected_before_download():
-    client = MagicMock()
-    client.get_messages = AsyncMock(return_value=_document_message("application/pdf"))
-    client.download_media = AsyncMock()
+    client = _client_serving(_document_message("application/pdf"))
 
     with pytest.raises(ValueError, match="is file, not image"):
         await get_image(client, encode_message_media(100, 5))
     client.download_media.assert_not_awaited()
+
+
+async def test_text_file_decoded():
+    client = _client_serving(_document_message("text/markdown"), "# привет".encode())
+    assert await get_text_file(client, encode_message_media(100, 5)) == "# привет"
+
+
+@pytest.mark.parametrize(
+    "tl_message, data, error",
+    [
+        (_document_message("text/plain", size=17), b"", "above the limit of 16"),
+        (_document_message("image/png"), b"", "is image, not file"),
+        (_document_message("application/octet-stream"), b"\xff\xfe\x00", "not a UTF-8"),
+    ],
+    ids=["too_large", "image", "binary"],
+)
+async def test_text_file_rejected(tl_message, data, error):
+    client = _client_serving(tl_message, data)
+    with pytest.raises(ValueError, match=error):
+        await get_text_file(client, encode_message_media(100, 5))
 
 
 async def test_profile_photo():

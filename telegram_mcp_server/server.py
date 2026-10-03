@@ -17,6 +17,7 @@ from telegram_mcp_server.tools.chats import get_folders as _get_folders
 from telegram_mcp_server.tools.chats import search_chats as _search_chats
 from telegram_mcp_server.tools.entities import get_entity as _get_entity
 from telegram_mcp_server.tools.media import get_image as _get_image
+from telegram_mcp_server.tools.media import get_text_file as _get_text_file
 from telegram_mcp_server.tools.messages import count_messages as _count_messages
 from telegram_mcp_server.tools.messages import get_message as _get_message
 from telegram_mcp_server.tools.messages import get_messages as _get_messages
@@ -210,6 +211,19 @@ async def get_image(media_id: str) -> ImageContent:
     image = await _get_image(client, media_id)
     data_base64 = base64.b64encode(image.data).decode()
     return ImageContent(type="image", data=data_base64, mimeType=image.mime_type)
+
+
+@mcp.tool()
+async def get_text_file(media_id: str) -> str:
+    """Return the content of a UTF-8 text file attached to a message.
+
+    Fails for binary files and for files above the server's size limit.
+
+    Args:
+        media_id: Opaque media ID from the "file" field of a message.
+    """
+    client = await get_client()
+    return await _get_text_file(client, media_id)
 
 
 @mcp.tool()
