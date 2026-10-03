@@ -34,6 +34,7 @@ class Message(ToolModel):
     reply_to_message_id: str | None = None
     unread: bool | None = None
     image: str | None = None
+    voice: str | None = None
     audio: str | None = None
     video: str | None = None
     file: str | None = None
@@ -77,7 +78,7 @@ def _extract_content(msg: TLMessage, peer_id: int) -> _MessageContent:
     media = getattr(msg, "media", None)
     category = classify_media(media)
     caption: str = getattr(msg, "message", "") or ""
-    if category is None:
+    if category in (None, MediaCategory.VOICE):
         return _MessageContent(text=caption)
 
     handle = encode_message_media(peer_id, msg.id)
@@ -86,7 +87,7 @@ def _extract_content(msg: TLMessage, peer_id: int) -> _MessageContent:
             return _MessageContent(text=_format_sticker(media.document))
         case MediaCategory.IMAGE:
             return _MessageContent(text=caption, image=handle)
-        case MediaCategory.AUDIO | MediaCategory.VOICE:
+        case MediaCategory.AUDIO:
             return _MessageContent(text=caption, audio=handle)
         case MediaCategory.VIDEO:
             return _MessageContent(text=caption, video=handle)

@@ -53,6 +53,10 @@ _MEDIA_CASES = {
         _make_document("audio/mpeg", [DocumentAttributeAudio(duration=1)]),
         {"audio": HANDLE},
     ),
+    "voice": (
+        _make_document("audio/ogg", [DocumentAttributeAudio(duration=1, voice=True)]),
+        {},
+    ),
     "video": (
         _make_document("video/mp4", [DocumentAttributeVideo(duration=1, w=1, h=1)]),
         {"video": HANDLE},

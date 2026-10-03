@@ -407,6 +407,42 @@ class TestCountMessages:
         client.get_messages.assert_called_once_with(1, limit=0)
 
 
+class TestVoiceTranscripts:
+    async def test_get_messages_includes_transcript(self):
+        from telethon.tl.functions.messages import TranscribeAudioRequest
+        from telethon.tl.types import Document, DocumentAttributeAudio, MessageMediaDocument
+        from telethon.tl.types.messages import TranscribedAudio
+
+        from telegram_mcp_server.tools.messages import get_messages
+
+        voice_msg = _make_tl_msg(1, text="")
+        voice_msg.media = MessageMediaDocument(
+            document=Document(
+                id=1,
+                access_hash=0,
+                file_reference=b"",
+                date=None,
+                mime_type="audio/ogg",
+                size=1,
+                dc_id=1,
+                attributes=[DocumentAttributeAudio(duration=1, voice=True)],
+            )
+        )
+        client = _make_client([voice_msg])
+        dialogs_side_effect = client.side_effect
+
+        async def _call_side_effect(request):
+            if isinstance(request, TranscribeAudioRequest):
+                return TranscribedAudio(transcription_id=1, text="spoken words")
+            return await dialogs_side_effect(request)
+
+        client.side_effect = _call_side_effect
+
+        [parsed] = _parse_messages(await get_messages(client, chat_id=encode_chat(1)))
+        assert parsed["voice"] == "spoken words"
+        assert parsed["text"] == ""
+
+
 class TestGetMessage:
     async def test_returns_single_message(self):
         from telegram_mcp_server.tools.messages import get_message

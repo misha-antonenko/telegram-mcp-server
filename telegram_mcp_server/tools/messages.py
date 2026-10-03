@@ -14,6 +14,7 @@ from telethon.tl.types import Channel, User
 from telegram_mcp_server.client import get_owner_id
 from telegram_mcp_server.ids import ChatRef, decode_chat, decode_message
 from telegram_mcp_server.models.message import Message
+from telegram_mcp_server.tools.transcription import attach_voice_transcripts
 from telegram_mcp_server.yaml_utils import to_yaml
 
 PAGE_SIZE = 16
@@ -179,7 +180,10 @@ async def get_messages(
             msg.unread = True
 
     chat_type = await _get_chat_type(client, peer_id)
-    await _populate_senders(client, page, list(tl_messages), chat_type)
+    await asyncio.gather(
+        _populate_senders(client, page, list(tl_messages), chat_type),
+        attach_voice_transcripts(client, page, list(tl_messages)),
+    )
 
     return to_yaml([m.model_dump() for m in page])
 
@@ -220,7 +224,10 @@ async def search_messages(
     page = [Message.from_telethon(msg, 0) for msg in tl_messages]
 
     chat_type = _ChatType.UNKNOWN
-    await _populate_senders(client, page, tl_messages, chat_type)
+    await asyncio.gather(
+        _populate_senders(client, page, tl_messages, chat_type),
+        attach_voice_transcripts(client, page, tl_messages),
+    )
 
     return to_yaml([m.model_dump() for m in page])
 
@@ -231,5 +238,8 @@ async def get_message(client: TelegramClient, message_id: str) -> str:
     assert tl_msg is not None, f"Message not found: {message_id!r}"
     msg = Message.from_telethon(tl_msg, ref.peer_id)
     chat_type = await _get_chat_type(client, ref.peer_id)
-    await _populate_senders(client, [msg], [tl_msg], chat_type)
+    await asyncio.gather(
+        _populate_senders(client, [msg], [tl_msg], chat_type),
+        attach_voice_transcripts(client, [msg], [tl_msg]),
+    )
     return to_yaml(msg.model_dump())
