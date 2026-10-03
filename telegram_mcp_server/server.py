@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 from contextlib import asynccontextmanager
 from datetime import date
 
@@ -199,12 +200,16 @@ async def count_messages(
 async def get_image(media_id: str) -> ImageContent:
     """Fetch an image by its opaque media ID and return it as binary content.
 
+    Large images are downscaled.
+
     Args:
-        media_id: Opaque media ID obtained from get_messages or get_user.
+        media_id: Opaque media ID from the "image" field of a message, or profile_image_id
+                  from get_entity.
     """
     client = await get_client()
     image = await _get_image(client, media_id)
-    return ImageContent(type="image", data=image.data_base64, mimeType=image.mime_type)
+    data_base64 = base64.b64encode(image.data).decode()
+    return ImageContent(type="image", data=data_base64, mimeType=image.mime_type)
 
 
 @mcp.tool()

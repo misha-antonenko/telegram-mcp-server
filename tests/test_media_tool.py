@@ -1,95 +1,111 @@
-import asyncio
-import base64
-from pathlib import Path
+import io
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from PIL import Image as PillowImage
+from telethon.tl.types import Document, DocumentAttributeFilename, MessageMediaDocument
 
 from telegram_mcp_server.ids import encode_message_media, encode_user_photo
+from telegram_mcp_server.tools.images import normalize_image
+from telegram_mcp_server.tools.media import get_image
+
+MAX_SIDE_PX = 64
 
 
-class TestGetImage:
-    async def test_message_photo_cached(self, tmp_path):
-        from telegram_mcp_server.tools.media import get_image
+def _encode_image(image_format: str, size: tuple[int, int], mode: str = "RGB") -> bytes:
+    buffer = io.BytesIO()
+    PillowImage.new(mode, size).save(buffer, format=image_format)
+    return buffer.getvalue()
 
-        media_id = encode_message_media(100, 5)
-        fake_bytes = b"\xff\xd8\xff" + b"\x00" * 10
 
-        mock_msg = MagicMock()
-        mock_msg.media = MagicMock()
+def _document_message(mime_type: str) -> MagicMock:
+    document = Document(
+        id=1,
+        access_hash=0,
+        file_reference=b"",
+        date=None,
+        mime_type=mime_type,
+        size=10,
+        dc_id=1,
+        attributes=[DocumentAttributeFilename("x")],
+    )
+    tl_message = MagicMock()
+    tl_message.media = MessageMediaDocument(document=document)
+    return tl_message
 
-        client = MagicMock()
-        client.get_messages = AsyncMock(return_value=mock_msg)
 
-        async def fake_download(_msg, file=None):
-            await asyncio.to_thread(Path(file).write_bytes, fake_bytes)
+@pytest.fixture(autouse=True)
+def settings(tmp_path):
+    settings = MagicMock(image_cache_dir=tmp_path, image_max_side_px=MAX_SIDE_PX)
+    with patch("telegram_mcp_server.tools.media.get_settings", return_value=settings):
+        yield settings
 
-        client.download_media = fake_download
 
-        with patch("telegram_mcp_server.tools.media.get_settings") as mock_settings:
-            settings = MagicMock()
-            settings.image_cache_dir = tmp_path
-            mock_settings.return_value = settings
+@pytest.mark.parametrize(
+    "image_format, mode, size, expected_mime_type, expected_size, is_passthrough",
+    [
+        ("JPEG", "RGB", (32, 16), "image/jpeg", (32, 16), True),
+        ("PNG", "RGBA", (16, 16), "image/png", (16, 16), True),
+        ("JPEG", "RGB", (256, 128), "image/jpeg", (64, 32), False),
+        ("WEBP", "RGB", (128, 128), "image/png", (64, 64), False),
+        ("BMP", "RGB", (8, 8), "image/png", (8, 8), False),
+        ("TIFF", "RGB", (8, 8), "image/png", (8, 8), False),
+    ],
+)
+def test_normalize_image(
+    image_format, mode, size, expected_mime_type, expected_size, is_passthrough
+):
+    data = _encode_image(image_format, size, mode)
+    normalized = normalize_image(data, MAX_SIDE_PX)
+    assert normalized.mime_type == expected_mime_type
+    with PillowImage.open(io.BytesIO(normalized.data)) as decoded:
+        assert decoded.size == expected_size
+    assert (normalized.data == data) == is_passthrough
 
-            result = await get_image(client, media_id)
 
-        assert result.mime_type == "image/jpeg"
-        assert base64.b64decode(result.data_base64) == fake_bytes
+async def test_image_sent_as_file_is_downloaded_once():
+    data = _encode_image("PNG", (8, 8))
+    client = MagicMock()
+    client.get_messages = AsyncMock(return_value=_document_message("image/png"))
+    client.download_media = AsyncMock(return_value=data)
+    media_id = encode_message_media(100, 5)
 
-    async def test_cached_file_not_re_downloaded(self, tmp_path):
-        from telegram_mcp_server.tools.media import get_image
+    first = await get_image(client, media_id)
+    second = await get_image(client, media_id)
 
-        media_id = encode_message_media(1, 1)
-        import hashlib
+    assert first == second
+    assert first.mime_type == "image/png"
+    client.download_media.assert_awaited_once()
 
-        safe = hashlib.sha256(media_id.encode()).hexdigest()
-        cache_file = tmp_path / f"{safe}.bin"
-        fake_bytes = b"\x89PNG\r\n\x1a\n" + b"\x00" * 10
-        cache_file.write_bytes(fake_bytes)
 
-        client = MagicMock()
-        client.get_messages = AsyncMock()
+async def test_non_image_rejected_before_download():
+    client = MagicMock()
+    client.get_messages = AsyncMock(return_value=_document_message("application/pdf"))
+    client.download_media = AsyncMock()
 
-        with patch("telegram_mcp_server.tools.media.get_settings") as mock_settings:
-            settings = MagicMock()
-            settings.image_cache_dir = tmp_path
-            mock_settings.return_value = settings
+    with pytest.raises(ValueError, match="is file, not image"):
+        await get_image(client, encode_message_media(100, 5))
+    client.download_media.assert_not_awaited()
 
-            result = await get_image(client, media_id)
 
-        client.get_messages.assert_not_called()
-        assert result.mime_type == "image/png"
+async def test_profile_photo():
+    client = MagicMock()
+    client.download_profile_photo = AsyncMock(return_value=_encode_image("JPEG", (8, 8)))
 
-    async def test_invalid_media_id_raises(self, tmp_path):
-        from telegram_mcp_server.tools.media import get_image
+    result = await get_image(client, encode_user_photo(99))
 
-        client = MagicMock()
-        with patch("telegram_mcp_server.tools.media.get_settings") as mock_settings:
-            settings = MagicMock()
-            settings.image_cache_dir = tmp_path
-            mock_settings.return_value = settings
+    assert result.mime_type == "image/jpeg"
+    client.download_profile_photo.assert_awaited_once_with(99, file=bytes)
 
-            with pytest.raises(ValueError):
-                await get_image(client, "bad:id")
 
-    async def test_user_photo(self, tmp_path):
-        from telegram_mcp_server.tools.media import get_image
+async def test_missing_profile_photo_raises():
+    client = MagicMock()
+    client.download_profile_photo = AsyncMock(return_value=None)
 
-        media_id = encode_user_photo(99)
-        fake_bytes = b"RIFF" + b"\x00" * 4 + b"WEBP"
+    with pytest.raises(ValueError, match="No profile photo"):
+        await get_image(client, encode_user_photo(99))
 
-        async def fake_download_profile(_entity, file=None):
-            await asyncio.to_thread(Path(file).write_bytes, fake_bytes)
 
-        client = MagicMock()
-        client.get_profile_photos = AsyncMock(return_value=[MagicMock()])
-        client.download_profile_photo = fake_download_profile
-
-        with patch("telegram_mcp_server.tools.media.get_settings") as mock_settings:
-            settings = MagicMock()
-            settings.image_cache_dir = tmp_path
-            mock_settings.return_value = settings
-
-            result = await get_image(client, media_id)
-
-        assert result.mime_type == "image/webp"
+async def test_invalid_media_id_raises():
+    with pytest.raises(ValueError, match="Invalid media ID"):
+        await get_image(MagicMock(), "bad:id")
