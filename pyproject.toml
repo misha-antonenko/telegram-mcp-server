@@ -22,9 +22,34 @@ telegram-mcp-server = "main:main"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 
+[tool.ruff]
+line-length = 100
+src = ["."]
+
 [tool.ruff.lint]
-# FBT: bool positional args are intentional in MCP tool signatures.
-# TC: TYPE_CHECKING guards add boilerplate for no real benefit in a server app.
-# ASYNC240: we use asyncio, not trio/anyio.
-# C901: session_string_generator complexity is inherent to interactive flows.
-ignore = ["FBT001", "FBT002", "TC001", "TC002", "TC003", "ASYNC240", "C901"]
+extend-select = [
+    "A",
+    "ARG",
+    "ASYNC",
+    "B",
+    "C901",
+    "F",
+    "FBT",
+    "FURB",
+    "G",
+    "I",
+    "N",
+    "NPY",
+    "PD",
+    "PERF",
+    "PIE",
+    "PLE",
+    "RUF",
+    "SLF",
+    "TC",
+    "UP",
+]
+extend-ignore = ["E741", "RUF018", "G004", "PERF203"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 8
