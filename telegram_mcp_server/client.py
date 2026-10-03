@@ -42,6 +42,5 @@ def get_owner_id() -> int:
 
 
 async def disconnect() -> None:
-    global _client
     if _client is not None and _client.is_connected():
         await _client.disconnect()
