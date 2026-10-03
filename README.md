@@ -11,13 +11,16 @@ An MCP server that lets an LLM use Telegram as a normal human user, built with [
 | `get_messages` | Paginated messages from a chat (or global search), with optional keyword filter |
 | `search_messages` | Search for messages by keyword, optionally restricted to a specific chat |
 | `get_message` | Fetch a single message by opaque ID |
-| `get_image` | Fetch and cache a photo by its opaque media ID |
+| `get_image` | Fetch and cache an image (photo, image sent as a file, or profile photo) by its opaque media ID; large images are downscaled |
+| `get_text_file` | Fetch a UTF-8 text file attached to a message by its opaque media ID |
 | `get_user` | Name, username, bio, and profile photo ID for a user |
 | `upload_attachment` | Upload a base64-encoded file to the server's attachments directory |
 | `send_message` | Send a Markdown-formatted message with optional attachments and reply-to |
 | `forward_message` | Forward a message to another chat |
 
-All `get_*` and `search_*` tools (except `get_image`) return valid YAML.
+All `get_*` and `search_*` tools (except `get_image` and `get_text_file`) return valid YAML.
+
+Messages carry media in dedicated fields: `image`, `audio`, `video`, and `file` (with `file_name`) hold opaque media IDs; `voice` holds the transcript of a voice message, obtained through Telegram's built-in transcription (requires Telegram Premium).
 
 ## Deployment
 
