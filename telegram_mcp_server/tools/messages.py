@@ -63,19 +63,28 @@ async def _populate_senders(
     chat_type: _ChatType,
 ) -> None:
     if chat_type == _ChatType.BROADCAST_CHANNEL:
-        for msg, tl_msg in zip(messages, tl_messages, strict=True):
-            author = getattr(tl_msg, "post_author", None)
-            if author:
-                msg.sender = author
-        return
+        _populate_post_authors(messages, tl_messages)
+    elif chat_type == _ChatType.DIRECT:
+        _populate_direct_senders(messages)
+    else:
+        await _populate_group_senders(client, messages)
 
-    if chat_type == _ChatType.DIRECT:
-        my_id = get_owner_id()
-        for msg in messages:
-            if msg.sender_id is not None:
-                msg.sender = "me" if msg.sender_id == my_id else "them"
-        return
 
+def _populate_post_authors(messages: list[Message], tl_messages: list) -> None:
+    for msg, tl_msg in zip(messages, tl_messages, strict=True):
+        author = getattr(tl_msg, "post_author", None)
+        if author:
+            msg.sender = author
+
+
+def _populate_direct_senders(messages: list[Message]) -> None:
+    my_id = get_owner_id()
+    for msg in messages:
+        if msg.sender_id is not None:
+            msg.sender = "me" if msg.sender_id == my_id else "them"
+
+
+async def _populate_group_senders(client: TelegramClient, messages: list[Message]) -> None:
     ids = {m.sender_id for m in messages if m.sender_id is not None}
     if not ids:
         return
