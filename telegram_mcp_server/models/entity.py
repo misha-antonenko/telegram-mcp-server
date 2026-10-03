@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal, Union
+from typing import TYPE_CHECKING, Literal
 
 from telegram_mcp_server.ids import encode_user_photo
 from telegram_mcp_server.models.base import ToolModel
@@ -119,4 +119,4 @@ class GroupEntity(ToolModel):
         )
 
 
-Entity = Union[UserEntity, ChannelEntity, GroupEntity]
+Entity = UserEntity | ChannelEntity | GroupEntity

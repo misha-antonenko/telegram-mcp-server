@@ -14,14 +14,14 @@ class TestToTelethonEntities:
         return _to_telethon_entities(entities)
 
     def _entity(self, **kwargs):
-        defaults = dict(
-            type="bold",
-            offset=0,
-            length=5,
-            url=None,
-            language=None,
-            custom_emoji_id=None,
-        )
+        defaults = {
+            "type": "bold",
+            "offset": 0,
+            "length": 5,
+            "url": None,
+            "language": None,
+            "custom_emoji_id": None,
+        }
         defaults.update(kwargs)
         return TmEntity(**defaults)
 
