@@ -37,6 +37,6 @@ async def get_entity(client: TelegramClient, entity_id: int) -> str:
         full = await client(GetFullChatRequest(chat_id=entity_id))
         result = GroupEntity.from_full_chat(full, entity)
     else:
-        raise ValueError(f"Unknown entity type: {type(entity).__name__}")
+        raise TypeError(f"Unknown entity type: {type(entity).__name__}")
 
     return to_yaml(result.model_dump())

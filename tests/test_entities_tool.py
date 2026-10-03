@@ -198,5 +198,5 @@ class TestGetEntityUnknown:
         client = AsyncMock()
         client.get_entity = AsyncMock(return_value=unknown)
 
-        with pytest.raises(ValueError, match="Unknown entity type"):
+        with pytest.raises(TypeError, match="Unknown entity type"):
             await get_entity(client, entity_id=999)
