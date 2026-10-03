@@ -37,7 +37,7 @@ def _make_client(tl_msgs):
         return result
 
     client.get_messages = AsyncMock(side_effect=_get_messages_side_effect)
-    client.get_entity = AsyncMock(side_effect=Exception("no entity"))
+    client.get_entity = AsyncMock(side_effect=ValueError("no entity"))
 
     return client
 

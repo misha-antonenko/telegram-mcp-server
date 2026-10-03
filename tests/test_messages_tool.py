@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import yaml
+from telethon.errors import RPCError
 from telethon.helpers import TotalList
 
 from telegram_mcp_server.ids import encode_chat, encode_message, encode_topic
@@ -50,7 +51,7 @@ def _make_client(oldest_first_tl_msgs, read_inbox_max_id: int = 0):
 
     client.get_messages = AsyncMock(side_effect=_get_messages_side_effect)
     client.get_input_entity = AsyncMock(return_value=MagicMock())
-    client.get_entity = AsyncMock(side_effect=Exception("no entity"))
+    client.get_entity = AsyncMock(side_effect=ValueError("no entity"))
 
     dialog = MagicMock()
     dialog.read_inbox_max_id = read_inbox_max_id
@@ -75,6 +76,11 @@ def _make_sender_client(tl_msgs):
 
     client.get_messages = AsyncMock(side_effect=_get_messages_side_effect)
     client.get_input_entity = AsyncMock(return_value=MagicMock())
+
+    async def _call_side_effect(*_args, **_kwargs):
+        return MagicMock(dialogs=[])
+
+    client.side_effect = _call_side_effect
     return client
 
 
@@ -326,6 +332,25 @@ class TestGetMessages:
         for row in _parse_messages(result):
             assert "unread" not in row
 
+    @pytest.mark.parametrize(
+        ("dialogs_error", "expected_error"),
+        [
+            (RPCError(request=None, message="PEER_ID_INVALID"), None),
+            (RuntimeError("unexpected"), RuntimeError),
+        ],
+    )
+    async def test_dialogs_request_failure(self, dialogs_error, expected_error):
+        from telegram_mcp_server.tools.messages import get_messages
+
+        client = _make_client([_make_tl_msg(1)])
+        client.side_effect = dialogs_error
+        if expected_error is None:
+            [row] = _parse_messages(await get_messages(client, chat_id=encode_chat(1)))
+            assert row["unread"] is True
+        else:
+            with pytest.raises(expected_error):
+                await get_messages(client, chat_id=encode_chat(1))
+
     async def test_since_uses_min_id(self):
         from telegram_mcp_server.tools.messages import get_messages
 
@@ -389,7 +414,7 @@ class TestGetMessage:
         tl_msg = _make_tl_msg(7, "single")
         client = MagicMock()
         client.get_messages = AsyncMock(return_value=tl_msg)
-        client.get_entity = AsyncMock(side_effect=Exception("no entity"))
+        client.get_entity = AsyncMock(side_effect=ValueError("no entity"))
 
         result = await get_message(client, message_id=encode_message(99, 7))
         parsed = yaml.safe_load(result)
@@ -402,7 +427,7 @@ class TestGetMessage:
         tl_msg = _make_tl_msg(42, "x")
         client = MagicMock()
         client.get_messages = AsyncMock(return_value=tl_msg)
-        client.get_entity = AsyncMock(side_effect=Exception("no entity"))
+        client.get_entity = AsyncMock(side_effect=ValueError("no entity"))
 
         await get_message(client, message_id=encode_message(1234, 42))
         client.get_messages.assert_called_once_with(1234, ids=42)
@@ -445,7 +470,7 @@ class TestGetMessage:
 
         client = MagicMock()
         client.get_messages = AsyncMock(return_value=None)
-        client.get_entity = AsyncMock(side_effect=Exception("no entity"))
+        client.get_entity = AsyncMock(side_effect=ValueError("no entity"))
 
         with pytest.raises(AssertionError):
             await get_message(client, message_id=encode_message(1, 999))

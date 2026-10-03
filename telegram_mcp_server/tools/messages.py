@@ -7,6 +7,7 @@ from enum import Enum, auto
 import telethon.hints
 from telethon import TelegramClient
 from telethon import utils as tl_utils
+from telethon.errors import RPCError
 from telethon.tl.functions.messages import GetPeerDialogsRequest
 from telethon.tl.types import Channel, User
 
@@ -45,7 +46,7 @@ async def _get_chat_type(client: TelegramClient, peer_id: int | None) -> _ChatTy
         return _ChatType.UNKNOWN
     try:
         entity = await client.get_entity(peer_id)
-    except Exception:
+    except (ValueError, RPCError):
         return _ChatType.UNKNOWN
 
     if isinstance(entity, User):
@@ -93,7 +94,7 @@ async def _populate_group_senders(client: TelegramClient, messages: list[Message
         try:
             entity = await client.get_entity(entity_id)
             return entity_id, _format_sender_name(entity)
-        except Exception:
+        except (ValueError, RPCError):
             return None
 
     results = await asyncio.gather(*(_fetch(eid) for eid in ids))
@@ -161,7 +162,7 @@ async def get_messages(
         dialogs_result = await client(GetPeerDialogsRequest(peers=[peer_id]))
         if dialogs_result.dialogs:
             read_inbox_max_id = dialogs_result.dialogs[0].read_inbox_max_id
-    except Exception:
+    except RPCError:
         pass
 
     if min_id:
