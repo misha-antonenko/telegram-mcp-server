@@ -124,6 +124,11 @@ async def _find_last_message_id_before(
 
 def _forward_page_offset(page_idx: int, *, is_anchored_at_min_id: bool) -> int:
     offset = page_idx * PAGE_SIZE
+    # With reverse=True, Telethon sets offset_id from min_id and
+    # adjusts add_offset relative to that anchor.  When anchored at
+    # offset_id=1 (no min_id), positive add_offset pages forward.
+    # When anchored at min_id+1, the direction flips — negate to
+    # keep pages going forward in time.
     return -offset if is_anchored_at_min_id else offset
 
 
