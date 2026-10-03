@@ -16,12 +16,12 @@ from telegram_mcp_server.settings import Settings, get_settings
 from telegram_mcp_server.tools.chats import get_chats as _get_chats
 from telegram_mcp_server.tools.chats import get_folders as _get_folders
 from telegram_mcp_server.tools.chats import search_chats as _search_chats
+from telegram_mcp_server.tools.entities import get_entity as _get_entity
 from telegram_mcp_server.tools.media import get_image as _get_image
 from telegram_mcp_server.tools.messages import count_messages as _count_messages
 from telegram_mcp_server.tools.messages import get_message as _get_message
 from telegram_mcp_server.tools.messages import get_messages as _get_messages
 from telegram_mcp_server.tools.messages import search_messages as _search_messages
-from telegram_mcp_server.tools.entities import get_entity as _get_entity
 from telegram_mcp_server.tools.send import forward_message as _forward_message
 from telegram_mcp_server.tools.send import send_message as _send_message
 from telegram_mcp_server.tools.send import upload_attachment as _upload_attachment

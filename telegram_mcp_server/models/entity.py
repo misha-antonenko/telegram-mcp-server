@@ -8,7 +8,11 @@ from telegram_mcp_server.models.base import ToolModel
 if TYPE_CHECKING:
     from telethon.tl.types import (
         Channel as TLChannel,
+    )
+    from telethon.tl.types import (
         Chat as TLChat,
+    )
+    from telethon.tl.types import (
         messages,
         users,
     )

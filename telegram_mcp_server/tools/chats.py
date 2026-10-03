@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from telethon import TelegramClient
 from telethon import utils as tl_utils
@@ -19,7 +19,7 @@ from telegram_mcp_server.yaml_utils import to_yaml
 
 PAGE_SIZE = 16
 
-_EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
+_EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 _FOLDER_ALL_UNARCHIVED = "all unarchived"
 _FOLDER_ARCHIVE = "archive"
 

@@ -237,9 +237,9 @@ class TestGetMessages:
 
     async def test_sender_me_them_in_dm(self):
         """In DMs, sender is 'me' or 'them'."""
-        import telegram_mcp_server.client as client_module
         from telethon.tl.types import PeerUser, User
 
+        import telegram_mcp_server.client as client_module
         from telegram_mcp_server.tools.messages import get_messages
 
         my_id = 100

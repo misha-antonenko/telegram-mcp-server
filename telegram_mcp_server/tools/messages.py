@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from enum import Enum, auto
 
+import telethon.hints
 from telethon import TelegramClient
 from telethon import utils as tl_utils
-import telethon.hints
 from telethon.tl.functions.messages import GetPeerDialogsRequest
 from telethon.tl.types import Channel, User
 
@@ -112,7 +112,7 @@ async def _populate_senders(
 
 def _date_to_datetime(d: date) -> datetime:
     """Convert a date to a timezone-aware datetime at midnight UTC."""
-    return datetime(d.year, d.month, d.day, tzinfo=timezone.utc)
+    return datetime(d.year, d.month, d.day, tzinfo=UTC)
 
 
 async def _build_chat_kwargs(client: TelegramClient, chat_id: str) -> tuple[int, dict]:

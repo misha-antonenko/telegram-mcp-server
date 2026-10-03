@@ -1,5 +1,6 @@
 """Tests for the get_chats and get_folders tools."""
 
+from datetime import UTC
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import yaml
@@ -326,13 +327,13 @@ class TestGetChats:
 
     async def test_entries_sorted_by_last_message_date(self):
         """Forum topics must be interleaved with regular chats by recency."""
-        from datetime import datetime, timezone
+        from datetime import datetime
 
-        from telegram_mcp_server.tools.chats import get_chats
         from telegram_mcp_server.ids import encode_chat, encode_topic
+        from telegram_mcp_server.tools.chats import get_chats
 
         def _dt(ts: int) -> datetime:
-            return datetime.fromtimestamp(ts, tz=timezone.utc)
+            return datetime.fromtimestamp(ts, tz=UTC)
 
         # Regular chat with date=5.
         chat_dialog = _make_dialog(1, "Chat", unread_count=0, message_text="hi")
