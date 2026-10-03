@@ -18,6 +18,7 @@ def _make_dialog(
     title,
     unread_count,
     message_text,
+    *,
     is_forum=False,
     sender_id=None,
     entity_cls=User,

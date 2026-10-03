@@ -6,7 +6,7 @@ import yaml
 from telegram_mcp_server.ids import encode_user_photo
 
 
-def _make_user(user_id=42, first="Alice", last="", username="alice", has_photo=True):
+def _make_user(user_id=42, first="Alice", last="", username="alice", *, has_photo=True):
     from telethon.tl.types import User
 
     user = MagicMock(spec=User)
@@ -31,6 +31,7 @@ def _make_channel(
     channel_id=100,
     title="Test Channel",
     username="testchannel",
+    *,
     megagroup=False,
     gigagroup=False,
     has_photo=True,
@@ -55,7 +56,7 @@ def _make_full_channel(about="Channel description"):
     return full
 
 
-def _make_chat(chat_id=200, title="Test Group", has_photo=True):
+def _make_chat(chat_id=200, title="Test Group", *, has_photo=True):
     from telethon.tl.types import Chat
 
     chat = MagicMock(spec=Chat)

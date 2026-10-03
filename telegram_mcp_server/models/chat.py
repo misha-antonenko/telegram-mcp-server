@@ -43,6 +43,7 @@ class Chat(ToolModel):
         supergroup_id: int,
         forum_name: str,
         topic: ForumTopic,
+        *,
         has_unread: bool,
         last_sender_id: int | None = None,
         last_message_date: datetime | None = None,

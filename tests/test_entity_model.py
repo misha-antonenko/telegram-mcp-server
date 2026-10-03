@@ -10,6 +10,7 @@ def _make_full_user(
     last="Smith",
     username="alice",
     about="Bio text",
+    *,
     has_photo=True,
 ):
     user = MagicMock()
@@ -32,6 +33,7 @@ def _make_channel(
     channel_id=100,
     title="Test Channel",
     username="testchannel",
+    *,
     has_photo=True,
 ):
     channel = MagicMock()
@@ -50,7 +52,7 @@ def _make_full_channel(about="Channel description"):
     return full
 
 
-def _make_chat(chat_id=200, title="Test Group", has_photo=True):
+def _make_chat(chat_id=200, title="Test Group", *, has_photo=True):
     chat = MagicMock()
     chat.id = chat_id
     chat.title = title
