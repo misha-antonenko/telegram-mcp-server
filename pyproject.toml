@@ -23,8 +23,4 @@ telegram-mcp-server = "main:main"
 asyncio_mode = "auto"
 
 [tool.ruff.lint]
-# FBT: bool positional args are intentional in MCP tool signatures.
-# TC: TYPE_CHECKING guards add boilerplate for no real benefit in a server app.
-# ASYNC240: we use asyncio, not trio/anyio.
-# C901: session_string_generator complexity is inherent to interactive flows.
 ignore = ["FBT001", "FBT002", "TC001", "TC002", "TC003", "ASYNC240", "C901"]

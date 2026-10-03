@@ -1,22 +1,5 @@
-"""Opaque ID encoding/decoding for chats, messages, and media.
-
-Chat IDs:
-  c:{peer_id}              — regular chat/group/channel
-  t:{supergroup_id}:{topic_id} — forum topic
-
-Message IDs:
-  m:{peer_id}:{msg_id}     — message in any chat (supergroup_id for topics)
-
-Media IDs:
-  mp:{peer_id}:{msg_id}    — photo/video/file attached to a message
-  up:{user_id}             — user profile photo (current)
-"""
-
 from dataclasses import dataclass
-
-# ---------------------------------------------------------------------------
-# Chat IDs
-# ---------------------------------------------------------------------------
+from enum import StrEnum
 
 
 def encode_chat(peer_id: int) -> str:
@@ -30,7 +13,7 @@ def encode_topic(supergroup_id: int, topic_id: int) -> str:
 @dataclass(frozen=True)
 class ChatRef:
     peer_id: int
-    topic_id: int | None = None  # None → regular chat; int → forum topic
+    topic_id: int | None = None
 
     @property
     def is_topic(self) -> bool:
@@ -49,11 +32,6 @@ def decode_chat(chat_id: str) -> ChatRef:
         _, sg, topic = chat_id.split(":", 2)
         return ChatRef(peer_id=int(sg), topic_id=int(topic))
     raise ValueError(f"Invalid chat ID: {chat_id!r}")
-
-
-# ---------------------------------------------------------------------------
-# Message IDs
-# ---------------------------------------------------------------------------
 
 
 def encode_message(peer_id: int, msg_id: int) -> str:
@@ -76,11 +54,6 @@ def decode_message(message_id: str) -> MessageRef:
     return MessageRef(peer_id=int(peer), msg_id=int(mid))
 
 
-# ---------------------------------------------------------------------------
-# Media IDs
-# ---------------------------------------------------------------------------
-
-
 def encode_message_media(peer_id: int, msg_id: int) -> str:
     return f"mp:{peer_id}:{msg_id}"
 
@@ -89,17 +62,29 @@ def encode_user_photo(user_id: int) -> str:
     return f"up:{user_id}"
 
 
+class MediaKind(StrEnum):
+    MESSAGE_ATTACHMENT = "mp"
+    PROFILE_PHOTO = "up"
+
+
 @dataclass(frozen=True)
 class MediaRef:
-    kind: str  # "mp" or "up"
+    kind: MediaKind
     peer_id: int
-    msg_id: int | None = None  # only for "mp"
+    msg_id: int | None = None
+
+    def __post_init__(self) -> None:
+        assert (self.kind == MediaKind.MESSAGE_ATTACHMENT) == (
+            self.msg_id is not None
+        ), self
 
 
 def decode_media(media_id: str) -> MediaRef:
     if media_id.startswith("mp:"):
         _, peer, mid = media_id.split(":", 2)
-        return MediaRef(kind="mp", peer_id=int(peer), msg_id=int(mid))
+        return MediaRef(
+            kind=MediaKind.MESSAGE_ATTACHMENT, peer_id=int(peer), msg_id=int(mid)
+        )
     if media_id.startswith("up:"):
-        return MediaRef(kind="up", peer_id=int(media_id[3:]))
+        return MediaRef(kind=MediaKind.PROFILE_PHOTO, peer_id=int(media_id[3:]))
     raise ValueError(f"Invalid media ID: {media_id!r}")

@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
-"""Manually call any MCP tool against the running server.
+from __future__ import annotations
+
+import json
+import ssl
+import sys
+import urllib.request
+from pathlib import Path
+
+_USAGE = """Manually call any MCP tool against the running server.
 
 Reads MCP_AUTH_TOKEN and MCP_DOMAIN from .env automatically.
 The server URL defaults to https://<MCP_DOMAIN>/mcp; override with --url.
@@ -19,14 +27,6 @@ Examples:
     uv run python scripts/call_tool.py get_message message_id=m:123:456
 """
 
-from __future__ import annotations
-
-import json
-import ssl
-import sys
-import urllib.request
-from pathlib import Path
-
 
 def _load_env() -> dict[str, str]:
     env: dict[str, str] = {}
@@ -40,7 +40,6 @@ def _load_env() -> dict[str, str]:
 
 
 def _parse_value(v: str) -> object:
-    """Parse a string CLI value into the most appropriate Python type."""
     if v == "null":
         return None
     if v == "true":
@@ -54,6 +53,13 @@ def _parse_value(v: str) -> object:
     return v
 
 
+def _create_ssl_context_accepting_self_signed_certificates() -> ssl.SSLContext:
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    return ctx
+
+
 def _call(tool: str, args: dict, token: str, url: str) -> dict:
     body = json.dumps(
         {
@@ -63,10 +69,7 @@ def _call(tool: str, args: dict, token: str, url: str) -> dict:
             "params": {"name": tool, "arguments": args},
         }
     ).encode()
-    # Allow self-signed certs for local/dev use.
-    ctx = ssl.create_default_context()
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
+    ctx = _create_ssl_context_accepting_self_signed_certificates()
     req = urllib.request.Request(
         url,
         data=body,
@@ -85,7 +88,7 @@ def _call(tool: str, args: dict, token: str, url: str) -> dict:
 
 def main() -> None:
     if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help"):
-        print(__doc__)
+        print(_USAGE)
         sys.exit(0)
 
     tool = sys.argv[1]

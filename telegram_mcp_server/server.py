@@ -1,5 +1,3 @@
-"""FastMCP server wiring."""
-
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
@@ -25,6 +23,8 @@ from telegram_mcp_server.tools.messages import search_messages as _search_messag
 from telegram_mcp_server.tools.send import forward_message as _forward_message
 from telegram_mcp_server.tools.send import send_message as _send_message
 from telegram_mcp_server.tools.send import upload_attachment as _upload_attachment
+
+_STATIC_TOKEN_SCOPES: list[str] = []
 
 
 @asynccontextmanager
@@ -56,7 +56,9 @@ def _configure_auth(settings: Settings):
     token_verifier = None
     if auth_token := settings.mcp_auth_token:
         token_verifier = StaticTokenVerifier(
-            tokens={auth_token: {"client_id": "mcp-client", "scopes": []}}
+            tokens={
+                auth_token: {"client_id": "mcp-client", "scopes": _STATIC_TOKEN_SCOPES}
+            }
         )
 
     assert github_provider or token_verifier, (
@@ -65,10 +67,10 @@ def _configure_auth(settings: Settings):
     )
 
     if github_provider and token_verifier:
-        # Override required_scopes=[] to prevent GitHubProvider's default ['user']
-        # scope from being enforced against static tokens.
         return MultiAuth(
-            server=github_provider, verifiers=[token_verifier], required_scopes=[]
+            server=github_provider,
+            verifiers=[token_verifier],
+            required_scopes=_STATIC_TOKEN_SCOPES,
         )
     return github_provider or token_verifier
 
@@ -203,8 +205,8 @@ async def get_image(media_id: str) -> ImageContent:
         media_id: Opaque media ID obtained from get_messages or get_user.
     """
     client = await get_client()
-    result = await _get_image(client, media_id)
-    return ImageContent(type="image", data=result["data"], mimeType=result["mime_type"])
+    image = await _get_image(client, media_id)
+    return ImageContent(type="image", data=image.data_base64, mimeType=image.mime_type)
 
 
 @mcp.tool()

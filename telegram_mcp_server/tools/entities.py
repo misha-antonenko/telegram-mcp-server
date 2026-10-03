@@ -1,5 +1,3 @@
-"""get_entity tool implementation."""
-
 from __future__ import annotations
 
 from telethon import TelegramClient
@@ -18,10 +16,6 @@ from telegram_mcp_server.yaml_utils import to_yaml
 
 
 async def get_entity(client: TelegramClient, entity_id: int) -> str:
-    """Return a YAML-serialised Entity for the given *entity_id*.
-
-    Works for users, channels, and groups.
-    """
     entity = await client.get_entity(entity_id)
     result: Entity
 

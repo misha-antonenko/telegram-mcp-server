@@ -28,7 +28,6 @@ class UserEntity(ToolModel):
 
     @classmethod
     def from_full(cls, full: users.UserFull) -> UserEntity:
-        """Build from a Telethon UserFull response."""
         user = full.users[0]
         first = getattr(user, "first_name", "") or ""
         last = getattr(user, "last_name", "") or ""
@@ -59,7 +58,6 @@ class ChannelEntity(ToolModel):
 
     @classmethod
     def from_full(cls, full: messages.ChatFull, channel: TLChannel) -> ChannelEntity:
-        """Build from a Telethon ChatFull response for a broadcast channel."""
         name = getattr(channel, "title", "") or str(channel.id)
         username = getattr(channel, "username", None)
         about = getattr(full.full_chat, "about", None) or None
@@ -89,7 +87,6 @@ class GroupEntity(ToolModel):
     def from_full_channel(
         cls, full: messages.ChatFull, channel: TLChannel
     ) -> GroupEntity:
-        """Build from a Telethon ChatFull response for a supergroup/megagroup."""
         name = getattr(channel, "title", "") or str(channel.id)
         username = getattr(channel, "username", None)
         about = getattr(full.full_chat, "about", None) or None
@@ -108,7 +105,6 @@ class GroupEntity(ToolModel):
 
     @classmethod
     def from_full_chat(cls, full: messages.ChatFull, chat: TLChat) -> GroupEntity:
-        """Build from a Telethon ChatFull response for a basic group."""
         name = getattr(chat, "title", "") or str(chat.id)
         about = getattr(full.full_chat, "about", None) or None
 

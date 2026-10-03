@@ -1,19 +1,4 @@
 #!/usr/bin/env python3
-"""
-Telegram Session String Generator
-
-This script generates a session string that can be used for Telegram authentication
-with the Telegram MCP server. The session string allows for portable authentication
-without storing session files.
-
-Usage:
-    python session_string_generator.py
-
-Requirements:
-    - telethon
-    - python-dotenv
-"""
-
 import getpass
 import io
 import os

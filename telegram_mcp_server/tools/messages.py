@@ -1,5 +1,3 @@
-"""get_messages and get_message tool implementations."""
-
 from __future__ import annotations
 
 import asyncio
@@ -21,10 +19,10 @@ PAGE_SIZE = 16
 
 
 class _ChatType(Enum):
-    DM = auto()  # 1:1 chat with a user
-    CHANNEL = auto()  # broadcast channel (not a group)
-    GROUP = auto()  # group chat (basic group, supergroup, megagroup)
-    UNKNOWN = auto()  # global search or unknown entity
+    DIRECT = auto()
+    BROADCAST_CHANNEL = auto()
+    GROUP = auto()
+    UNKNOWN = auto()
 
 
 def _format_sender_name(entity: object) -> str:
@@ -43,7 +41,6 @@ def _format_sender_name(entity: object) -> str:
 
 
 async def _get_chat_type(client: TelegramClient, peer_id: int | None) -> _ChatType:
-    """Determine the chat type for sender simplification."""
     if peer_id is None:
         return _ChatType.UNKNOWN
     try:
@@ -52,13 +49,12 @@ async def _get_chat_type(client: TelegramClient, peer_id: int | None) -> _ChatTy
         return _ChatType.UNKNOWN
 
     if isinstance(entity, User):
-        return _ChatType.DM
+        return _ChatType.DIRECT
     if isinstance(entity, Channel):
         is_group = getattr(entity, "megagroup", False) or getattr(
             entity, "gigagroup", False
         )
-        return _ChatType.GROUP if is_group else _ChatType.CHANNEL
-    # Basic Chat type is always a group.
+        return _ChatType.GROUP if is_group else _ChatType.BROADCAST_CHANNEL
     return _ChatType.GROUP
 
 
@@ -68,30 +64,20 @@ async def _populate_senders(
     tl_messages: list,
     chat_type: _ChatType,
 ) -> None:
-    """Set `sender` on each message based on chat type.
-
-    - DM: "me" or "them"
-    - Channel: post_author if signed, else None (omitted)
-    - Group/Unknown: "Full Name (@username)"
-
-    *tl_messages* must be in the same order as *messages* (oldest-first after reversal).
-    """
-    if chat_type == _ChatType.CHANNEL:
-        # Channel posts may have a signature (post_author).
-        for msg, tl_msg in zip(messages, tl_messages):
+    if chat_type == _ChatType.BROADCAST_CHANNEL:
+        for msg, tl_msg in zip(messages, tl_messages, strict=True):
             author = getattr(tl_msg, "post_author", None)
             if author:
                 msg.sender = author
         return
 
-    if chat_type == _ChatType.DM:
+    if chat_type == _ChatType.DIRECT:
         my_id = get_owner_id()
         for msg in messages:
             if msg.sender_id is not None:
                 msg.sender = "me" if msg.sender_id == my_id else "them"
         return
 
-    # Group or unknown: fetch sender names.
     ids = {m.sender_id for m in messages if m.sender_id is not None}
     if not ids:
         return
@@ -110,23 +96,35 @@ async def _populate_senders(
             msg.sender = name_map.get(msg.sender_id)
 
 
-def _date_to_datetime(d: date) -> datetime:
-    """Convert a date to a timezone-aware datetime at midnight UTC."""
+def _utc_midnight(d: date) -> datetime:
     return datetime(d.year, d.month, d.day, tzinfo=UTC)
 
 
 async def _build_chat_kwargs(client: TelegramClient, chat_id: str) -> tuple[int, dict]:
-    """Parse *chat_id*, prime entity cache, return (peer_id, extra kwargs).
-
-    Resolving the entity via *client* ensures that Telethon's cache has
-    the access hash needed for channels and supergroups.
-    """
     ref: ChatRef = decode_chat(chat_id)
-    await client.get_input_entity(ref.peer_id)
+    await _cache_access_hash(client, ref.peer_id)
     kwargs: dict = {}
     if ref.is_topic:
         kwargs["reply_to"] = ref.topic_id
     return ref.peer_id, kwargs
+
+
+async def _cache_access_hash(client: TelegramClient, peer_id: int) -> None:
+    await client.get_input_entity(peer_id)
+
+
+async def _find_last_message_id_before(
+    client: TelegramClient, peer_id: int, moment: datetime, filter_kwargs: dict
+) -> int:
+    newest_first = await client.get_messages(
+        peer_id, limit=1, offset_date=moment, **filter_kwargs
+    )
+    return newest_first[0].id if newest_first else 0
+
+
+def _forward_page_offset(page_idx: int, *, is_anchored_at_min_id: bool) -> int:
+    offset = page_idx * PAGE_SIZE
+    return -offset if is_anchored_at_min_id else offset
 
 
 async def get_messages(
@@ -136,16 +134,6 @@ async def get_messages(
     page_idx: int = 0,
     search_query: str = "",
 ) -> str:
-    """Return a YAML-serialised paginated list of messages from *chat_id*.
-
-    Pages and messages are ordered oldest-first.
-
-    Args:
-        chat_id: Opaque chat ID.
-        since: Only include messages from this date onwards (inclusive).
-        page_idx: Zero-based page index (16 messages per page).
-        search_query: Filter messages to those containing this text.
-    """
     peer_id, kwargs = await _build_chat_kwargs(client, chat_id)
 
     if search_query:
@@ -153,16 +141,10 @@ async def get_messages(
 
     min_id: int = 0
     if since is not None:
-        # Convert the date to a min_id boundary.  offset_date returns
-        # messages *before* the date (newest-first), so limit=1 gives
-        # the last message before `since`.  Using its id as min_id
-        # restricts results to messages after the boundary.
         filter_kwargs = {k: v for k, v in kwargs.items() if k in ("reply_to", "search")}
-        boundary = await client.get_messages(
-            peer_id, limit=1, offset_date=_date_to_datetime(since), **filter_kwargs
+        min_id = await _find_last_message_id_before(
+            client, peer_id, _utc_midnight(since), filter_kwargs
         )
-        if boundary:
-            min_id = boundary[0].id
 
     read_inbox_max_id: int = 0
     try:
@@ -176,17 +158,14 @@ async def get_messages(
         kwargs["min_id"] = min_id
 
     kwargs["limit"] = PAGE_SIZE
-    # With reverse=True, Telethon sets offset_id from min_id and
-    # adjusts add_offset relative to that anchor.  When anchored at
-    # offset_id=1 (no min_id), positive add_offset pages forward.
-    # When anchored at min_id+1, the direction flips — negate to
-    # keep pages going forward in time.
-    kwargs["add_offset"] = -page_idx * PAGE_SIZE if min_id else page_idx * PAGE_SIZE
+    kwargs["add_offset"] = _forward_page_offset(
+        page_idx, is_anchored_at_min_id=bool(min_id)
+    )
     tl_messages = await client.get_messages(peer_id, reverse=True, **kwargs)
     assert isinstance(tl_messages, telethon.hints.TotalList), type(tl_messages)
 
     page = [Message.from_telethon(msg, peer_id) for msg in tl_messages]
-    for msg, tl_msg in zip(page, tl_messages):
+    for msg, tl_msg in zip(page, tl_messages, strict=True):
         if tl_msg.id > read_inbox_max_id:
             msg.unread = True
 
@@ -201,12 +180,6 @@ async def count_messages(
     chat_id: str,
     search_query: str = "",
 ) -> int:
-    """Return the total number of messages in a chat (optionally filtered by search query).
-
-    Args:
-        chat_id: Opaque chat ID.
-        search_query: Filter messages to those containing this text.
-    """
     peer_id, kwargs = await _build_chat_kwargs(client, chat_id)
     if search_query:
         kwargs["search"] = search_query
@@ -221,27 +194,16 @@ async def search_messages(
     page_idx: int = 0,
     until: date | None = None,
 ) -> str:
-    """Search globally across all chats for messages matching *query*.
-
-    Results are ordered newest-first. For searching within a specific chat,
-    use get_messages with search_query instead.
-
-    Args:
-        query: Non-empty search string.
-        page_idx: Zero-based page index (16 messages per page).
-        until: Only return messages up to this date (inclusive).
-    """
     assert query, "query must be non-empty"
 
     kwargs: dict = {"search": query}
 
     if until is not None:
-        # we want inclusivity
-        kwargs["offset_date"] = _date_to_datetime(until) + timedelta(days=1)
+        end_of_until_day = _utc_midnight(until) + timedelta(days=1)
+        kwargs["offset_date"] = end_of_until_day
 
     kwargs["limit"] = PAGE_SIZE
     kwargs["add_offset"] = page_idx * PAGE_SIZE
-    # Global search cannot use reverse=True, so results are newest-first.
     tl_messages_raw = await client.get_messages(None, **kwargs)
     assert isinstance(tl_messages_raw, telethon.hints.TotalList), type(tl_messages_raw)
 
@@ -255,7 +217,6 @@ async def search_messages(
 
 
 async def get_message(client: TelegramClient, message_id: str) -> str:
-    """Return a YAML-serialised single message by its opaque message ID."""
     ref = decode_message(message_id)
     tl_msg = await client.get_messages(ref.peer_id, ids=ref.msg_id)
     assert tl_msg is not None, f"Message not found: {message_id!r}"

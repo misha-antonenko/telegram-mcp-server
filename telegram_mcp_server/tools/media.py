@@ -1,24 +1,23 @@
-"""get_image tool implementation."""
-
 from __future__ import annotations
 
-# MCP image content type (base64 encoded)
 import base64
 import hashlib
+from dataclasses import dataclass
 from pathlib import Path
 
 from telethon import TelegramClient
 
-from telegram_mcp_server.ids import MediaRef, decode_media
+from telegram_mcp_server.ids import MediaKind, MediaRef, decode_media
 from telegram_mcp_server.settings import get_settings
 
 
-async def get_image(client: TelegramClient, media_id: str) -> dict:
-    """Download (and cache) an image by opaque media ID.
+@dataclass(frozen=True, slots=True)
+class Image:
+    mime_type: str
+    data_base64: str
 
-    Returns a dict with keys ``mime_type`` and ``data`` (base64-encoded bytes),
-    suitable for wrapping in an MCP ImageContent.
-    """
+
+async def get_image(client: TelegramClient, media_id: str) -> Image:
     settings = get_settings()
     cache_dir: Path = settings.image_cache_dir
     cache_dir.mkdir(parents=True, exist_ok=True)
@@ -26,8 +25,7 @@ async def get_image(client: TelegramClient, media_id: str) -> dict:
     safe_name = hashlib.sha256(media_id.encode()).hexdigest()
     ref: MediaRef = decode_media(media_id)
 
-    if ref.kind == "mp":
-        # Message photo/video/file
+    if ref.kind == MediaKind.MESSAGE_ATTACHMENT:
         assert ref.msg_id is not None
         cache_path = cache_dir / f"{safe_name}.bin"
         if not cache_path.exists():
@@ -37,8 +35,7 @@ async def get_image(client: TelegramClient, media_id: str) -> dict:
                 raise ValueError(f"No media found for {media_id!r}")
             await client.download_media(msg, file=str(cache_path))
         data = cache_path.read_bytes()
-    elif ref.kind == "up":
-        # User profile photo
+    elif ref.kind == MediaKind.PROFILE_PHOTO:
         cache_path = cache_dir / f"{safe_name}.bin"
         if not cache_path.exists():
             photos = await client.get_profile_photos(ref.peer_id, limit=1)
@@ -49,15 +46,13 @@ async def get_image(client: TelegramClient, media_id: str) -> dict:
     else:
         raise ValueError(f"Unknown media kind in {media_id!r}")
 
-    # Detect MIME type by magic bytes (best-effort)
-    mime_type = _detect_mime(data)
-    return {
-        "mime_type": mime_type,
-        "data": base64.b64encode(data).decode(),
-    }
+    return Image(
+        mime_type=_guess_mime_type_from_magic_bytes(data),
+        data_base64=base64.b64encode(data).decode(),
+    )
 
 
-def _detect_mime(data: bytes) -> str:
+def _guess_mime_type_from_magic_bytes(data: bytes) -> str:
     if data[:3] == b"\xff\xd8\xff":
         return "image/jpeg"
     if data[:8] == b"\x89PNG\r\n\x1a\n":

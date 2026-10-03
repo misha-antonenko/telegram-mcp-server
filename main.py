@@ -1,5 +1,3 @@
-"""Main entry point."""
-
 import logging
 
 from telegram_mcp_server.server import mcp

@@ -1,5 +1,3 @@
-"""Singleton Telethon TelegramClient with async-safe initialization."""
-
 from __future__ import annotations
 
 import asyncio
@@ -20,7 +18,6 @@ def _get_lock() -> asyncio.Lock:
 
 
 async def get_client() -> TelegramClient:
-    """Return the connected singleton TelegramClient, creating it if needed."""
     global _client, _owner_id
     async with _get_lock():
         if _client is None or not _client.is_connected():
@@ -40,13 +37,11 @@ async def get_client() -> TelegramClient:
 
 
 def get_owner_id() -> int:
-    """Return the authenticated user's Telegram ID. Requires get_client() called first."""
     assert _owner_id is not None, "owner ID not yet fetched — call get_client() first"
     return _owner_id
 
 
 async def disconnect() -> None:
-    """Disconnect the singleton client if connected."""
     global _client
     if _client is not None and _client.is_connected():
         await _client.disconnect()

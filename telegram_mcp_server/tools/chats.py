@@ -1,5 +1,3 @@
-"""get_chats and get_folders tool implementations."""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -10,7 +8,8 @@ from telethon.tl.functions.messages import (
     GetDialogFiltersRequest,
     GetForumTopicsRequest,
 )
-from telethon.tl.types import Channel, Chat, DialogFilter, User
+from telethon.tl.types import Channel, DialogFilter, User
+from telethon.tl.types import Chat as BasicGroup
 
 from telegram_mcp_server.client import get_owner_id
 from telegram_mcp_server.models.chat import Chat as ChatModel
@@ -25,19 +24,13 @@ _FOLDER_ARCHIVE = "archive"
 
 
 def _filter_title(f: object) -> str | None:
-    """Extract a plain-string title from a dialog filter object.
-
-    Telegram returns titles as TextWithEntities; fall back to str() for
-    any type that doesn't have a .text attribute.
-    """
     raw = getattr(f, "title", None)
     if raw is None:
         return None
     return getattr(raw, "text", None) or str(raw) or None
 
 
-def _peer_id(peer: object) -> int | None:
-    """Return the bare entity ID from an InputPeer."""
+def _bare_peer_id(peer: object) -> int | None:
     return (
         getattr(peer, "user_id", None)
         or getattr(peer, "channel_id", None)
@@ -46,23 +39,10 @@ def _peer_id(peer: object) -> int | None:
 
 
 def _peer_ids(peers: list) -> set[int]:
-    return {pid for p in peers if (pid := _peer_id(p)) is not None}
+    return {pid for p in peers if (pid := _bare_peer_id(p)) is not None}
 
 
 def _dialog_matches_filter(dialog: object, flt: DialogFilter) -> bool:
-    """Return True if *dialog* belongs to *flt* per Telegram's filter semantics.
-
-    Order of precedence (mirrors official client behaviour):
-    1. Explicitly excluded peers → reject.
-    2. Explicitly included peers (pinned + include_peers) → accept.
-    3. Category flags (contacts, non_contacts, groups, broadcasts, bots) → accept
-       if the dialog's entity type matches an enabled flag.
-    4. No match → reject.
-
-    exclude_muted / exclude_read / exclude_archived are intentionally not
-    applied here because we want to show all folder members, not a filtered
-    view (the caller can add those filters later if needed).
-    """
     entity = dialog.entity
     eid = entity.id
 
@@ -76,7 +56,10 @@ def _dialog_matches_filter(dialog: object, flt: DialogFilter) -> bool:
     if eid in include_ids:
         return True
 
-    # Category-flag matching.
+    return _entity_matches_filter_categories(entity, flt)
+
+
+def _entity_matches_filter_categories(entity: object, flt: DialogFilter) -> bool:
     if isinstance(entity, User):
         if getattr(entity, "bot", False):
             return bool(getattr(flt, "bots", False))
@@ -84,8 +67,7 @@ def _dialog_matches_filter(dialog: object, flt: DialogFilter) -> bool:
             return bool(getattr(flt, "contacts", False))
         return bool(getattr(flt, "non_contacts", False))
 
-    if isinstance(entity, Chat):
-        # Basic group (not a supergroup/channel).
+    if isinstance(entity, BasicGroup):
         return bool(getattr(flt, "groups", False))
 
     if isinstance(entity, Channel):
@@ -115,7 +97,6 @@ async def _find_custom_filter(
 
 
 async def get_folders(client: TelegramClient) -> str:
-    """Return a YAML list of available folder names."""
     names: list[str] = [_FOLDER_ALL_UNARCHIVED, _FOLDER_ARCHIVE]
     for f in await _fetch_filters(client):
         title = _filter_title(f)
@@ -125,7 +106,6 @@ async def get_folders(client: TelegramClient) -> str:
 
 
 def _populate_last_senders(my_id: int, chats: list[ChatModel]) -> None:
-    """Set last_sender to 'me' or 'them' on each chat based on sender ID."""
     for chat in chats:
         if chat.last_sender_id is not None:
             chat.last_sender = "me" if chat.last_sender_id == my_id else "them"
@@ -136,10 +116,6 @@ async def search_chats(
     query: str,
     limit: int = 16,
 ) -> str:
-    """Return a YAML-serialised list of chats whose name contains *query* (case-insensitive).
-
-    Searches all dialogs (archived and non-archived). Returns at most *limit* results.
-    """
     assert query, "query must be non-empty"
     needle = query.lower()
     matches: list[ChatModel] = []
@@ -161,20 +137,14 @@ def _full_name_from_entity(entity: object) -> str:
 
 
 async def _iter_folder_dialogs(
-    client: TelegramClient, folder: str, limit: int | None = None
+    client: TelegramClient, folder: str, builtin_folder_limit: int | None = None
 ):
-    """Yield dialogs belonging to *folder*, handling custom filters client-side.
-
-    *limit* caps how many dialogs are fetched from Telegram for built-in
-    folders; it is ignored for custom folders because those require a full
-    client-side scan to apply filter semantics.
-    """
     if folder == _FOLDER_ALL_UNARCHIVED:
-        async for d in client.iter_dialogs(folder=0, limit=limit):
+        async for d in client.iter_dialogs(folder=0, limit=builtin_folder_limit):
             yield d
         return
     if folder == _FOLDER_ARCHIVE:
-        async for d in client.iter_dialogs(folder=1, limit=limit):
+        async for d in client.iter_dialogs(folder=1, limit=builtin_folder_limit):
             yield d
         return
 
@@ -195,13 +165,11 @@ async def get_chats(
     folder: str,
     page_idx: int = 0,
 ) -> str:
-    """Return a YAML-serialised paginated list of chats."""
-    # For built-in folders Telegram returns dialogs in recency order, so
-    # fetching (page_idx+1)*PAGE_SIZE dialogs is sufficient to populate all
-    # pages up to and including page_idx after forum expansion and sorting.
-    dialog_limit = (page_idx + 1) * PAGE_SIZE
+    dialogs_in_recency_order_covering_page = (page_idx + 1) * PAGE_SIZE
     entries: list[ChatModel] = []
-    async for dialog in _iter_folder_dialogs(client, folder, limit=dialog_limit):
+    async for dialog in _iter_folder_dialogs(
+        client, folder, builtin_folder_limit=dialogs_in_recency_order_covering_page
+    ):
         entity = dialog.entity
         is_forum = getattr(entity, "forum", False)
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal, NamedTuple
 
 from pydantic import Field
 
@@ -12,36 +12,31 @@ if TYPE_CHECKING:
     from telethon.tl.types import Message as TLMessage
 
 
+class _MessageContent(NamedTuple):
+    text: str
+    image: str | None = None
+    audio: str | None = None
+    video: str | None = None
+
+
 class Message(ToolModel):
-    id: str  # opaque MessageRef
-    timestamp: str  # "YYYY-MM-DD HH:MM" in UTC
-    text: (
-        str  # may contain <sticker .../> markers or opaque media IDs for unknown media
-    )
-    # Sender representation depends on chat type:
-    #   DMs: "me" or "them"
-    #   Channels: None (omitted)
-    #   Groups: "Full Name (@username)" or "Full Name"
+    id: str
+    timestamp: str
+    text: str
     sender: str | None = None
-    # Internal: raw sender ID for populating `sender` after construction.
     sender_id: int | None = Field(default=None, exclude=True)
-    forwarded_from_id: int | None = None  # user/channel ID if forwarded
-    reply_to_message_id: str | None = None  # opaque MessageRef of parent, if reply
-    unread: bool | None = None  # True only for unread messages; omitted otherwise
-    image: str | None = None  # opaque media handle when message contains a photo
-    audio: str | None = None  # opaque media handle when message contains audio/voice
-    video: str | None = None  # opaque media handle when message contains video
+    forwarded_from_id: int | None = None
+    reply_to_message_id: str | None = None
+    unread: bool | None = None
+    image: str | None = None
+    audio: str | None = None
+    video: str | None = None
 
     @classmethod
     def from_telethon(cls, msg: TLMessage, peer_id: int) -> Message:
-        """Build a Message from a Telethon Message object.
-
-        *peer_id* is the numeric ID of the chat the message belongs to
-        (for topics this is the supergroup ID).
-        """
         msg_id_str = encode_message(peer_id, msg.id)
-        timestamp = _format_ts(msg.date)
-        text, image, audio, video = _extract_media(msg, peer_id)
+        timestamp = _format_utc_minute(msg.date)
+        content = _extract_content(msg, peer_id)
         sender_id = _sender_id(msg)
         fwd_id = _forwarded_from_id(msg)
         reply_to_id: str | None = None
@@ -53,45 +48,30 @@ class Message(ToolModel):
         return cls(
             id=msg_id_str,
             timestamp=timestamp,
-            text=text,
+            text=content.text,
             sender_id=sender_id,
             forwarded_from_id=fwd_id,
             reply_to_message_id=reply_to_id,
-            image=image,
-            audio=audio,
-            video=video,
+            image=content.image,
+            audio=content.audio,
+            video=content.video,
         )
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _format_ts(dt: datetime | None) -> str:
+def _format_utc_minute(dt: datetime | None) -> str:
     if dt is None:
         return ""
     return dt.astimezone(UTC).strftime("%Y-%m-%d %H:%M")
 
 
-def _extract_media(
-    msg: TLMessage, peer_id: int
-) -> tuple[str, str | None, str | None, str | None]:
-    """Return (text, image, audio, video) for a message.
-
-    For typed media (photo/audio/video), *text* is the caption and the handle
-    goes into the corresponding typed field.  For stickers, *text* carries the
-    XML marker.  For other unrecognised media the handle is placed in *text*.
-    Webpage attachments are ignored so the message text passes through.
-    """
-    # Sticker — highest priority
+def _extract_content(msg: TLMessage, peer_id: int) -> _MessageContent:
     sticker_xml = _try_sticker(msg)
     if sticker_xml:
-        return sticker_xml, None, None, None
+        return _MessageContent(text=sticker_xml)
 
     media = getattr(msg, "media", None)
     if media is None or _is_webpage(msg):
-        return getattr(msg, "message", "") or "", None, None, None
+        return _MessageContent(text=getattr(msg, "message", "") or "")
 
     handle = encode_message_media(peer_id, msg.id)
     caption: str = getattr(msg, "message", "") or ""
@@ -99,24 +79,20 @@ def _extract_media(
     from telethon.tl.types import MessageMediaDocument, MessageMediaPhoto
 
     if isinstance(media, MessageMediaPhoto):
-        return caption, handle, None, None
+        return _MessageContent(text=caption, image=handle)
 
     if isinstance(media, MessageMediaDocument):
         kind = _document_kind(media)
+        assert kind != "sticker", f"sticker in message {msg.id} escaped _try_sticker"
         if kind == "audio":
-            return caption, None, handle, None
+            return _MessageContent(text=caption, audio=handle)
         if kind == "video":
-            return caption, None, None, handle
-        if kind == "sticker":
-            # Handled above; shouldn't reach here, but be safe.
-            return caption, None, None, None
+            return _MessageContent(text=caption, video=handle)
 
-    # Unknown media type: put the handle in text (preserve old behaviour).
-    return handle, None, None, None
+    return _MessageContent(text=handle)
 
 
-def _document_kind(media: object) -> str | None:
-    """Return 'sticker', 'audio', or 'video' based on document attributes."""
+def _document_kind(media: object) -> Literal["sticker", "audio", "video"] | None:
     from telethon.tl.types import (
         DocumentAttributeAudio,
         DocumentAttributeSticker,
@@ -159,10 +135,7 @@ def _is_webpage(msg: TLMessage) -> bool:
 
 
 def _sender_id(msg: TLMessage) -> int | None:
-    peer = getattr(msg, "from_id", None)
-    if peer is None:
-        # Channel posts: sender is the channel itself
-        peer = getattr(msg, "peer_id", None)
+    peer = getattr(msg, "from_id", None) or getattr(msg, "peer_id", None)
     if peer is None:
         return None
     return (
