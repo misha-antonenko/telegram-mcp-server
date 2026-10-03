@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Literal, NamedTuple
+from typing import TYPE_CHECKING, NamedTuple
 
 from pydantic import Field
+from telethon.tl.types import DocumentAttributeSticker
 
 from telegram_mcp_server.ids import encode_message, encode_message_media
 from telegram_mcp_server.models.base import ToolModel
+from telegram_mcp_server.models.media import MediaCategory, classify_media, get_document_file_name
 
 if TYPE_CHECKING:
+    from telethon.tl.types import Document
     from telethon.tl.types import Message as TLMessage
 
 
@@ -17,6 +20,8 @@ class _MessageContent(NamedTuple):
     image: str | None = None
     audio: str | None = None
     video: str | None = None
+    file: str | None = None
+    file_name: str | None = None
 
 
 class Message(ToolModel):
@@ -31,6 +36,8 @@ class Message(ToolModel):
     image: str | None = None
     audio: str | None = None
     video: str | None = None
+    file: str | None = None
+    file_name: str | None = None
 
     @classmethod
     def from_telethon(cls, msg: TLMessage, peer_id: int) -> Message:
@@ -55,6 +62,8 @@ class Message(ToolModel):
             image=content.image,
             audio=content.audio,
             video=content.video,
+            file=content.file,
+            file_name=content.file_name,
         )
 
 
@@ -65,73 +74,33 @@ def _format_utc_minute(dt: datetime | None) -> str:
 
 
 def _extract_content(msg: TLMessage, peer_id: int) -> _MessageContent:
-    sticker_xml = _try_sticker(msg)
-    if sticker_xml:
-        return _MessageContent(text=sticker_xml)
-
     media = getattr(msg, "media", None)
-    if media is None or _is_webpage(msg):
-        return _MessageContent(text=getattr(msg, "message", "") or "")
+    category = classify_media(media)
+    caption: str = getattr(msg, "message", "") or ""
+    if category is None:
+        return _MessageContent(text=caption)
 
     handle = encode_message_media(peer_id, msg.id)
-    caption: str = getattr(msg, "message", "") or ""
-
-    from telethon.tl.types import MessageMediaDocument, MessageMediaPhoto
-
-    if isinstance(media, MessageMediaPhoto):
-        return _MessageContent(text=caption, image=handle)
-
-    if isinstance(media, MessageMediaDocument):
-        kind = _document_kind(media)
-        assert kind != "sticker", f"sticker in message {msg.id} escaped _try_sticker"
-        if kind == "audio":
+    match category:
+        case MediaCategory.STICKER:
+            return _MessageContent(text=_format_sticker(media.document))
+        case MediaCategory.IMAGE:
+            return _MessageContent(text=caption, image=handle)
+        case MediaCategory.AUDIO | MediaCategory.VOICE:
             return _MessageContent(text=caption, audio=handle)
-        if kind == "video":
+        case MediaCategory.VIDEO:
             return _MessageContent(text=caption, video=handle)
-
-    return _MessageContent(text=handle)
-
-
-def _document_kind(media: object) -> Literal["sticker", "audio", "video"] | None:
-    from telethon.tl.types import (
-        DocumentAttributeAudio,
-        DocumentAttributeSticker,
-        DocumentAttributeVideo,
-    )
-
-    doc = getattr(media, "document", None)
-    if doc is None:
-        return None
-    for attr in getattr(doc, "attributes", []):
-        if isinstance(attr, DocumentAttributeSticker):
-            return "sticker"
-        if isinstance(attr, DocumentAttributeAudio):
-            return "audio"
-        if isinstance(attr, DocumentAttributeVideo):
-            return "video"
-    return None
+        case MediaCategory.FILE:
+            return _MessageContent(
+                text=caption, file=handle, file_name=get_document_file_name(media.document)
+            )
+        case MediaCategory.OTHER:
+            return _MessageContent(text=handle)
 
 
-def _try_sticker(msg: TLMessage) -> str | None:
-    from telethon.tl.types import DocumentAttributeSticker, MessageMediaDocument
-
-    media = getattr(msg, "media", None)
-    if not isinstance(media, MessageMediaDocument):
-        return None
-    doc = getattr(media, "document", None)
-    if doc is None:
-        return None
-    for attr in getattr(doc, "attributes", []):
-        if isinstance(attr, DocumentAttributeSticker):
-            alt = attr.alt or ""
-            return f'<sticker id="{doc.id}" alt="{alt}"/>'
-    return None
-
-
-def _is_webpage(msg: TLMessage) -> bool:
-    from telethon.tl.types import MessageMediaWebPage
-
-    return isinstance(getattr(msg, "media", None), MessageMediaWebPage)
+def _format_sticker(document: Document) -> str:
+    [alt] = [a.alt for a in document.attributes if isinstance(a, DocumentAttributeSticker)]
+    return f'<sticker id="{document.id}" alt="{alt or ""}"/>'
 
 
 def _sender_id(msg: TLMessage) -> int | None:
