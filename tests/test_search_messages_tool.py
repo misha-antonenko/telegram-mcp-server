@@ -24,7 +24,7 @@ def _make_tl_msg(msg_id, text="hi", msg_date: datetime | None = None):
 def _make_client(tl_msgs):
     client = MagicMock()
 
-    async def _get_messages_side_effect(*args, **kwargs):
+    async def _get_messages_side_effect(*_args, **kwargs):
         limit = kwargs.get("limit", len(tl_msgs))
         add_offset = kwargs.get("add_offset", 0)
         offset_date = kwargs.get("offset_date")

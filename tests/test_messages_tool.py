@@ -1,5 +1,5 @@
 from datetime import UTC, date, datetime
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import yaml
@@ -27,7 +27,7 @@ def _make_tl_msg(msg_id, text="hi", msg_date: datetime | None = None):
 def _make_client(oldest_first_tl_msgs, read_inbox_max_id: int = 0):
     client = MagicMock()
 
-    async def _get_messages_side_effect(*args, **kwargs):
+    async def _get_messages_side_effect(*_args, **kwargs):
         limit = kwargs.get("limit", len(oldest_first_tl_msgs))
         add_offset = kwargs.get("add_offset", 0)
         offset_date = kwargs.get("offset_date")
@@ -68,7 +68,7 @@ def _make_client(oldest_first_tl_msgs, read_inbox_max_id: int = 0):
 def _make_sender_client(tl_msgs):
     client = MagicMock()
 
-    async def _get_messages_side_effect(*args, **kwargs):
+    async def _get_messages_side_effect(*_args, **_kwargs):
         result = TotalList(tl_msgs)
         result.total = len(tl_msgs)
         return result
@@ -224,7 +224,6 @@ class TestGetMessages:
     async def test_sender_me_them_in_dm(self):
         from telethon.tl.types import PeerUser, User
 
-        import telegram_mcp_server.client as client_module
         from telegram_mcp_server.tools.messages import get_messages
 
         my_id = 100
@@ -244,13 +243,9 @@ class TestGetMessages:
         client = _make_sender_client([msg_from_me, msg_from_them])
         client.get_entity = AsyncMock(return_value=dm_entity)
 
-        orig = client_module._owner_id
-        client_module._owner_id = my_id
-        try:
+        with patch("telegram_mcp_server.tools.messages.get_owner_id", return_value=my_id):
             result = await get_messages(client, chat_id=encode_chat(999))
-            parsed = _parse_messages(result)
-        finally:
-            client_module._owner_id = orig
+        parsed = _parse_messages(result)
 
         assert parsed[0]["sender"] == "me"
         assert parsed[1]["sender"] == "them"
@@ -347,10 +342,7 @@ class TestGetMessages:
     async def test_since_pagination_goes_forward(self):
         from telegram_mcp_server.tools.messages import get_messages
 
-        msgs = [
-            _make_tl_msg(i, f"msg{i}", datetime(2024, 6, d, tzinfo=UTC))
-            for i, d in zip(range(1, 22), [1] + list(range(2, 22)))
-        ]
+        msgs = [_make_tl_msg(i, f"msg{i}", datetime(2024, 6, i, tzinfo=UTC)) for i in range(1, 22)]
         client = _make_client(msgs)
         p0 = _parse_messages(
             await get_messages(client, chat_id=encode_chat(1), since=date(2024, 6, 2), page_idx=0)
