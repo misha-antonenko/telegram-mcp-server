@@ -20,7 +20,7 @@ An MCP server that lets an LLM use Telegram as a normal human user, built with [
 
 All `get_*` and `search_*` tools (except `get_image` and `get_text_file`) return valid YAML.
 
-Messages carry media in dedicated fields: `image`, `audio`, `video`, and `file` (with `file_name`) hold opaque media IDs; `voice` holds the transcript of a voice message, obtained through Telegram's built-in transcription (requires Telegram Premium).
+Messages carry media in dedicated fields: `image`, `audio`, `video`, and `file` (with `file_name`) hold opaque media IDs; `voice` holds the transcript of a voice message, obtained through Telegram's built-in transcription (unlimited with Telegram Premium; other accounts get a limited number of trial transcriptions, after which the call fails).
 
 ## Deployment
 
