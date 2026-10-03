@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
-
 
 from pydantic import Field
 
@@ -15,7 +14,7 @@ if TYPE_CHECKING:
 
 class Message(ToolModel):
     id: str  # opaque MessageRef
-    timestamp: str  # "YYYY-MM-DD HH:MM" in UTC+4
+    timestamp: str  # "YYYY-MM-DD HH:MM" in UTC
     text: (
         str  # may contain <sticker .../> markers or opaque media IDs for unknown media
     )
@@ -69,13 +68,10 @@ class Message(ToolModel):
 # ---------------------------------------------------------------------------
 
 
-_UTC4 = timezone(timedelta(hours=4))
-
-
 def _format_ts(dt: datetime | None) -> str:
     if dt is None:
         return ""
-    return dt.astimezone(_UTC4).strftime("%Y-%m-%d %H:%M")
+    return dt.astimezone(UTC).strftime("%Y-%m-%d %H:%M")
 
 
 def _extract_media(
@@ -100,7 +96,7 @@ def _extract_media(
     handle = encode_message_media(peer_id, msg.id)
     caption: str = getattr(msg, "message", "") or ""
 
-    from telethon.tl.types import MessageMediaPhoto, MessageMediaDocument
+    from telethon.tl.types import MessageMediaDocument, MessageMediaPhoto
 
     if isinstance(media, MessageMediaPhoto):
         return caption, handle, None, None
@@ -122,8 +118,8 @@ def _extract_media(
 def _document_kind(media: object) -> str | None:
     """Return 'sticker', 'audio', or 'video' based on document attributes."""
     from telethon.tl.types import (
-        DocumentAttributeSticker,
         DocumentAttributeAudio,
+        DocumentAttributeSticker,
         DocumentAttributeVideo,
     )
 

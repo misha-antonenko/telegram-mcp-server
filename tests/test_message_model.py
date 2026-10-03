@@ -34,7 +34,7 @@ class TestMessageFromTelethon:
         dt = datetime(2024, 6, 15, 12, 30, 0, tzinfo=UTC)
         msg = _make_msg(date=dt)
         result = Message.from_telethon(msg, peer_id=1)
-        assert result.timestamp == "2024-06-15 16:30"  # UTC+4
+        assert result.timestamp == "2024-06-15 12:30"  # UTC
 
     def test_photo_caption_and_image_field(self):
         from telethon.tl.types import MessageMediaPhoto
