@@ -56,9 +56,7 @@ def _configure_auth(settings: Settings):
     token_verifier = None
     if auth_token := settings.mcp_auth_token:
         token_verifier = StaticTokenVerifier(
-            tokens={
-                auth_token: {"client_id": "mcp-client", "scopes": _STATIC_TOKEN_SCOPES}
-            }
+            tokens={auth_token: {"client_id": "mcp-client", "scopes": _STATIC_TOKEN_SCOPES}}
         )
 
     assert github_provider or token_verifier, (

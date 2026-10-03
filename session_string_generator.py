@@ -49,9 +49,7 @@ def _phone_login(client: TelegramClient) -> None:
     try:
         client.send_code_request(phone)
     except errors.FloodWaitError as e:
-        print(
-            f"\nFlood wait error; you must wait {e.seconds} seconds before trying again."
-        )
+        print(f"\nFlood wait error; you must wait {e.seconds} seconds before trying again.")
         client.disconnect()
         sys.exit(1)
     except errors.PhoneNumberInvalidError:
@@ -77,9 +75,7 @@ def main() -> None:
 
     if not api_id_str or not api_hash:
         print("Error: TELEGRAM_API_ID and TELEGRAM_API_HASH must be set in .env file")
-        print(
-            "Create an .env file with your credentials from https://my.telegram.org/apps"
-        )
+        print("Create an .env file with your credentials from https://my.telegram.org/apps")
         sys.exit(1)
 
     try:

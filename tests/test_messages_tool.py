@@ -119,9 +119,7 @@ class TestGetMessages:
 
         client = _make_client([])
         await get_messages(client, chat_id=encode_chat(300))
-        client.get_messages.assert_called_once_with(
-            300, reverse=True, limit=16, add_offset=0
-        )
+        client.get_messages.assert_called_once_with(300, reverse=True, limit=16, add_offset=0)
 
     async def test_search_query_passed(self):
         from telegram_mcp_server.tools.messages import get_messages
@@ -137,9 +135,7 @@ class TestGetMessages:
 
         client = _make_client([])
         await get_messages(client, chat_id=encode_chat(300), search_query="")
-        client.get_messages.assert_called_once_with(
-            300, reverse=True, limit=16, add_offset=0
-        )
+        client.get_messages.assert_called_once_with(300, reverse=True, limit=16, add_offset=0)
 
     async def test_oldest_first_order(self):
         from telegram_mcp_server.tools.messages import get_messages
@@ -344,9 +340,7 @@ class TestGetMessages:
             _make_tl_msg(3, "new", datetime(2024, 6, 20, tzinfo=UTC)),
         ]
         client = _make_client(msgs)
-        result = await get_messages(
-            client, chat_id=encode_chat(1), since=date(2024, 6, 10)
-        )
+        result = await get_messages(client, chat_id=encode_chat(1), since=date(2024, 6, 10))
         texts = [m["text"] for m in _parse_messages(result)]
         assert texts == ["mid", "new"]
 
@@ -359,15 +353,11 @@ class TestGetMessages:
         ]
         client = _make_client(msgs)
         p0 = _parse_messages(
-            await get_messages(
-                client, chat_id=encode_chat(1), since=date(2024, 6, 2), page_idx=0
-            )
+            await get_messages(client, chat_id=encode_chat(1), since=date(2024, 6, 2), page_idx=0)
         )
         client = _make_client(msgs)
         p1 = _parse_messages(
-            await get_messages(
-                client, chat_id=encode_chat(1), since=date(2024, 6, 2), page_idx=1
-            )
+            await get_messages(client, chat_id=encode_chat(1), since=date(2024, 6, 2), page_idx=1)
         )
         p0_ids = [int(m["id"].split(":")[2]) for m in p0]
         p1_ids = [int(m["id"].split(":")[2]) for m in p1]

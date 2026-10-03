@@ -117,9 +117,7 @@ class TestGetEntityChannel:
     async def test_returns_channel_yaml(self):
         from telegram_mcp_server.tools.entities import get_entity
 
-        channel = _make_channel(
-            channel_id=100, title="News", username="news", megagroup=False
-        )
+        channel = _make_channel(channel_id=100, title="News", username="news", megagroup=False)
         full = _make_full_channel(about="Daily news")
 
         client = AsyncMock()

@@ -205,9 +205,7 @@ class TestGetChats:
         dialog_out.entity.contact = False
 
         client = AsyncMock()
-        client.iter_dialogs = MagicMock(
-            return_value=_async_gen([dialog_in, dialog_out])
-        )
+        client.iter_dialogs = MagicMock(return_value=_async_gen([dialog_in, dialog_out]))
         client.return_value = filters_result
 
         result = await get_chats(client, folder="Work")
@@ -242,9 +240,7 @@ class TestGetChats:
         dialog_user.entity.contact = False
 
         client = AsyncMock()
-        client.iter_dialogs = MagicMock(
-            return_value=_async_gen([dialog_channel, dialog_user])
-        )
+        client.iter_dialogs = MagicMock(return_value=_async_gen([dialog_channel, dialog_user]))
         client.return_value = filters_result
 
         result = await get_chats(client, folder="Channels")
@@ -303,10 +299,7 @@ class TestGetChats:
         from telegram_mcp_server.tools.chats import get_chats
 
         client = MagicMock()
-        dialogs = [
-            _make_dialog(i, f"Chat{i}", unread_count=1, message_text="x")
-            for i in range(20)
-        ]
+        dialogs = [_make_dialog(i, f"Chat{i}", unread_count=1, message_text="x") for i in range(20)]
         client.iter_dialogs = MagicMock(return_value=_async_gen(dialogs))
         result = await get_chats(client, folder="all unarchived", page_idx=0)
         assert len(yaml.safe_load(result)) == 16
@@ -368,9 +361,7 @@ class TestGetChats:
         topics_result.messages = [msg10, msg20]
 
         client = AsyncMock()
-        client.iter_dialogs = MagicMock(
-            return_value=_async_gen([forum_dialog, chat_dialog])
-        )
+        client.iter_dialogs = MagicMock(return_value=_async_gen([forum_dialog, chat_dialog]))
         client.return_value = topics_result
 
         result = await get_chats(client, folder="all unarchived")
@@ -433,9 +424,7 @@ class TestGetChats:
     async def test_last_sender_is_them(self):
         from telegram_mcp_server.tools.chats import get_chats
 
-        dialog = _make_dialog(
-            1, "Chat", unread_count=1, message_text="hello", sender_id=42
-        )
+        dialog = _make_dialog(1, "Chat", unread_count=1, message_text="hello", sender_id=42)
         client = MagicMock()
         client.iter_dialogs = MagicMock(return_value=_async_gen([dialog]))
 
@@ -446,9 +435,7 @@ class TestGetChats:
     async def test_last_sender_is_me(self):
         from telegram_mcp_server.tools.chats import get_chats
 
-        dialog = _make_dialog(
-            1, "Chat", unread_count=1, message_text="hello", sender_id=_MY_ID
-        )
+        dialog = _make_dialog(1, "Chat", unread_count=1, message_text="hello", sender_id=_MY_ID)
         client = MagicMock()
         client.iter_dialogs = MagicMock(return_value=_async_gen([dialog]))
 
@@ -459,9 +446,7 @@ class TestGetChats:
     async def test_last_sender_absent_when_no_sender(self):
         from telegram_mcp_server.tools.chats import get_chats
 
-        dialog = _make_dialog(
-            1, "Chat", unread_count=1, message_text="hello", sender_id=None
-        )
+        dialog = _make_dialog(1, "Chat", unread_count=1, message_text="hello", sender_id=None)
         client = MagicMock()
         client.iter_dialogs = MagicMock(return_value=_async_gen([dialog]))
 

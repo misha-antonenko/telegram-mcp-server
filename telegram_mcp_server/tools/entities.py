@@ -24,9 +24,7 @@ async def get_entity(client: TelegramClient, entity_id: int) -> str:
         result = UserEntity.from_full(full)
     elif isinstance(entity, Channel):
         full = await client(GetFullChannelRequest(channel=entity))
-        is_group = getattr(entity, "megagroup", False) or getattr(
-            entity, "gigagroup", False
-        )
+        is_group = getattr(entity, "megagroup", False) or getattr(entity, "gigagroup", False)
         if is_group:
             result = GroupEntity.from_full_channel(full, entity)
         else:

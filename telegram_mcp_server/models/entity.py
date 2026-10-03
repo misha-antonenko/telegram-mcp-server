@@ -84,9 +84,7 @@ class GroupEntity(ToolModel):
     profile_image_id: str | None = None
 
     @classmethod
-    def from_full_channel(
-        cls, full: messages.ChatFull, channel: TLChannel
-    ) -> GroupEntity:
+    def from_full_channel(cls, full: messages.ChatFull, channel: TLChannel) -> GroupEntity:
         name = getattr(channel, "title", "") or str(channel.id)
         username = getattr(channel, "username", None)
         about = getattr(full.full_chat, "about", None) or None

@@ -74,17 +74,13 @@ class MediaRef:
     msg_id: int | None = None
 
     def __post_init__(self) -> None:
-        assert (self.kind == MediaKind.MESSAGE_ATTACHMENT) == (
-            self.msg_id is not None
-        ), self
+        assert (self.kind == MediaKind.MESSAGE_ATTACHMENT) == (self.msg_id is not None), self
 
 
 def decode_media(media_id: str) -> MediaRef:
     if media_id.startswith("mp:"):
         _, peer, mid = media_id.split(":", 2)
-        return MediaRef(
-            kind=MediaKind.MESSAGE_ATTACHMENT, peer_id=int(peer), msg_id=int(mid)
-        )
+        return MediaRef(kind=MediaKind.MESSAGE_ATTACHMENT, peer_id=int(peer), msg_id=int(mid))
     if media_id.startswith("up:"):
         return MediaRef(kind=MediaKind.PROFILE_PHOTO, peer_id=int(media_id[3:]))
     raise ValueError(f"Invalid media ID: {media_id!r}")

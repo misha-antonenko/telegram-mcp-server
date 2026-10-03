@@ -17,9 +17,7 @@ def _literal_representer(dumper: yaml.Dumper, data: str) -> yaml.ScalarNode:
 def _str_representer(dumper: yaml.Dumper, data: str) -> yaml.ScalarNode:
     if "\n" in data:
         block_style_compatible = "\n".join(line.rstrip() for line in data.split("\n"))
-        return dumper.represent_scalar(
-            "tag:yaml.org,2002:str", block_style_compatible, style="|"
-        )
+        return dumper.represent_scalar("tag:yaml.org,2002:str", block_style_compatible, style="|")
     return dumper.represent_scalar("tag:yaml.org,2002:str", data)
 
 

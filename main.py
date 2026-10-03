@@ -8,9 +8,7 @@ def _configure_logging() -> None:
     root = logging.getLogger()
     root.setLevel(logging.INFO)
     handler = logging.FileHandler("server.log", mode="a", encoding="utf-8")
-    handler.setFormatter(
-        logging.Formatter("[%(asctime)s %(levelname)s %(name)s] %(message)s")
-    )
+    handler.setFormatter(logging.Formatter("[%(asctime)s %(levelname)s %(name)s] %(message)s"))
     root.addHandler(handler)
 
 

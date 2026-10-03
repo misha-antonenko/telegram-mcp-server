@@ -51,9 +51,7 @@ async def _get_chat_type(client: TelegramClient, peer_id: int | None) -> _ChatTy
     if isinstance(entity, User):
         return _ChatType.DIRECT
     if isinstance(entity, Channel):
-        is_group = getattr(entity, "megagroup", False) or getattr(
-            entity, "gigagroup", False
-        )
+        is_group = getattr(entity, "megagroup", False) or getattr(entity, "gigagroup", False)
         return _ChatType.GROUP if is_group else _ChatType.BROADCAST_CHANNEL
     return _ChatType.GROUP
 
@@ -116,9 +114,7 @@ async def _cache_access_hash(client: TelegramClient, peer_id: int) -> None:
 async def _find_last_message_id_before(
     client: TelegramClient, peer_id: int, moment: datetime, filter_kwargs: dict
 ) -> int:
-    newest_first = await client.get_messages(
-        peer_id, limit=1, offset_date=moment, **filter_kwargs
-    )
+    newest_first = await client.get_messages(peer_id, limit=1, offset_date=moment, **filter_kwargs)
     return newest_first[0].id if newest_first else 0
 
 
@@ -163,9 +159,7 @@ async def get_messages(
         kwargs["min_id"] = min_id
 
     kwargs["limit"] = PAGE_SIZE
-    kwargs["add_offset"] = _forward_page_offset(
-        page_idx, is_anchored_at_min_id=bool(min_id)
-    )
+    kwargs["add_offset"] = _forward_page_offset(page_idx, is_anchored_at_min_id=bool(min_id))
     tl_messages = await client.get_messages(peer_id, reverse=True, **kwargs)
     assert isinstance(tl_messages, telethon.hints.TotalList), type(tl_messages)
 

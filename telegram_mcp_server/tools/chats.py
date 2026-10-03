@@ -71,9 +71,7 @@ def _entity_matches_filter_categories(entity: object, flt: DialogFilter) -> bool
         return bool(getattr(flt, "groups", False))
 
     if isinstance(entity, Channel):
-        is_group = getattr(entity, "megagroup", False) or getattr(
-            entity, "gigagroup", False
-        )
+        is_group = getattr(entity, "megagroup", False) or getattr(entity, "gigagroup", False)
         if is_group:
             return bool(getattr(flt, "groups", False))
         return bool(getattr(flt, "broadcasts", False))
@@ -86,9 +84,7 @@ async def _fetch_filters(client: TelegramClient) -> list:
     return result.filters
 
 
-async def _find_custom_filter(
-    client: TelegramClient, folder: str
-) -> DialogFilter | None:
+async def _find_custom_filter(client: TelegramClient, folder: str) -> DialogFilter | None:
     for f in await _fetch_filters(client):
         title = _filter_title(f)
         if title and title.lower() == folder.lower():

@@ -52,9 +52,7 @@ class TestSearchMessages:
 
         client = _make_client([])
         await search_messages(client, query="hello")
-        client.get_messages.assert_called_once_with(
-            None, search="hello", limit=16, add_offset=0
-        )
+        client.get_messages.assert_called_once_with(None, search="hello", limit=16, add_offset=0)
 
     async def test_returns_yaml_list(self):
         from telegram_mcp_server.tools.messages import search_messages
