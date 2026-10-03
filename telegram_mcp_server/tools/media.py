@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 from dataclasses import dataclass
@@ -23,7 +24,7 @@ class Image:
 async def get_image(client: TelegramClient, media_id: str) -> Image:
     settings = get_settings()
     cache_dir: Path = settings.image_cache_dir
-    cache_dir.mkdir(parents=True, exist_ok=True)
+    await asyncio.to_thread(cache_dir.mkdir, parents=True, exist_ok=True)
 
     safe_name = hashlib.sha256(media_id.encode()).hexdigest()
     ref: MediaRef = decode_media(media_id)
@@ -31,21 +32,21 @@ async def get_image(client: TelegramClient, media_id: str) -> Image:
     if ref.kind == MediaKind.MESSAGE_ATTACHMENT:
         assert ref.msg_id is not None
         cache_path = cache_dir / f"{safe_name}.bin"
-        if not cache_path.exists():
+        if not await asyncio.to_thread(cache_path.exists):
             msgs = await client.get_messages(ref.peer_id, ids=ref.msg_id)
             msg = msgs if not isinstance(msgs, list) else (msgs[0] if msgs else None)
             if msg is None or msg.media is None:
                 raise ValueError(f"No media found for {media_id!r}")
             await client.download_media(msg, file=str(cache_path))
-        data = cache_path.read_bytes()
+        data = await asyncio.to_thread(cache_path.read_bytes)
     elif ref.kind == MediaKind.PROFILE_PHOTO:
         cache_path = cache_dir / f"{safe_name}.bin"
-        if not cache_path.exists():
+        if not await asyncio.to_thread(cache_path.exists):
             photos = await client.get_profile_photos(ref.peer_id, limit=1)
             if not photos:
                 raise ValueError(f"No profile photo for user {ref.peer_id}")
             await client.download_profile_photo(ref.peer_id, file=str(cache_path))
-        data = cache_path.read_bytes()
+        data = await asyncio.to_thread(cache_path.read_bytes)
     else:
         raise ValueError(f"Unknown media kind in {media_id!r}")
 

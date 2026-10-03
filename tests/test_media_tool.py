@@ -1,3 +1,4 @@
+import asyncio
 import base64
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -21,7 +22,7 @@ class TestGetImage:
         client.get_messages = AsyncMock(return_value=mock_msg)
 
         async def fake_download(_msg, file=None):
-            Path(file).write_bytes(fake_bytes)
+            await asyncio.to_thread(Path(file).write_bytes, fake_bytes)
 
         client.download_media = fake_download
 
@@ -78,7 +79,7 @@ class TestGetImage:
         fake_bytes = b"RIFF" + b"\x00" * 4 + b"WEBP"
 
         async def fake_download_profile(_entity, file=None):
-            Path(file).write_bytes(fake_bytes)
+            await asyncio.to_thread(Path(file).write_bytes, fake_bytes)
 
         client = MagicMock()
         client.get_profile_photos = AsyncMock(return_value=[MagicMock()])
