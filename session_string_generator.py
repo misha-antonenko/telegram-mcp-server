@@ -56,7 +56,7 @@ def _phone_login(client: TelegramClient) -> None:
         print("\nThe phone number is invalid.")
         client.disconnect()
         sys.exit(1)
-    except Exception as e:
+    except errors.RPCError as e:
         print(f"\nError sending code: {e}")
         client.disconnect()
         sys.exit(1)
@@ -88,7 +88,7 @@ def _write_session_string_to_env_file(session_string: str) -> None:
             file.writelines(env_contents)
 
         print("\n.env file updated successfully!")
-    except Exception as e:
+    except OSError as e:
         print(f"\nError updating .env file: {e}")
         print("Please manually add the session string to your .env file.")
 
@@ -147,7 +147,7 @@ def main() -> None:
 
         client.disconnect()
 
-    except Exception as e:
+    except (errors.RPCError, OSError) as e:
         print(f"\nError: {e}")
         print("Failed to generate session string. Please try again.")
         sys.exit(1)
