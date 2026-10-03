@@ -3,12 +3,15 @@ from __future__ import annotations
 import base64
 import hashlib
 from dataclasses import dataclass
-from pathlib import Path
-
-from telethon import TelegramClient
+from typing import TYPE_CHECKING
 
 from telegram_mcp_server.ids import MediaKind, MediaRef, decode_media
 from telegram_mcp_server.settings import get_settings
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from telethon import TelegramClient
 
 
 @dataclass(frozen=True, slots=True)

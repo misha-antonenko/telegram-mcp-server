@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from telethon import TelegramClient
+from typing import TYPE_CHECKING
+
 from telethon.tl.functions.channels import GetFullChannelRequest
 from telethon.tl.functions.messages import GetFullChatRequest
 from telethon.tl.functions.users import GetFullUserRequest
@@ -13,6 +14,9 @@ from telegram_mcp_server.models.entity import (
     UserEntity,
 )
 from telegram_mcp_server.yaml_utils import to_yaml
+
+if TYPE_CHECKING:
+    from telethon import TelegramClient
 
 
 async def get_entity(client: TelegramClient, entity_id: int) -> str:

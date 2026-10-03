@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import base64
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import telegramify_markdown
-from telegramify_markdown.entity import MessageEntity as TmEntity
-from telethon import TelegramClient
 from telethon.tl import types as tl
 
 from telegram_mcp_server.ids import decode_chat, decode_message
+
+if TYPE_CHECKING:
+    from telegramify_markdown.entity import MessageEntity as TmEntity
+    from telethon import TelegramClient
 
 _ENTITY_TYPE_MAP = {
     "bold": tl.MessageEntityBold,
