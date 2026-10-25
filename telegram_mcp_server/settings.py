@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     github_client_id: str | None = None
     github_client_secret: str | None = None
     github_jwt_signing_key: str | None = None
+    github_token_cache_ttl_seconds: int = 24 * 60 * 60
 
 
 _settings: Settings | None = None

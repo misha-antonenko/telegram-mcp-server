@@ -53,6 +53,7 @@ def _configure_auth(settings: Settings):
             client_secret=settings.github_client_secret,
             base_url=base_url,
             jwt_signing_key=settings.github_jwt_signing_key,
+            cache_ttl_seconds=settings.github_token_cache_ttl_seconds,
         )
 
     token_verifier = None
